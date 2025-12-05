@@ -8,10 +8,19 @@ MVP is complete with the following features:
 - Topic browsing with subscription/follow functionality
 - AI-powered signal generation using OpenAI (via Replit AI Integrations)
 - Strategy builder for allocating USDC across multiple signals
-- Strategy execution with simulated blockchain transactions
+- Real wallet integration with OnchainKit + wagmi on Base Sepolia
+- Smart Wallet (ERC-4337) support with gasless transaction capability
+- Strategy execution with simulated blockchain transactions (real onchain execution ready when contract is deployed)
 - Strategy history with transaction tracking
 - Dark/light mode support
 - Responsive design for mobile and desktop
+
+## Wallet & Blockchain
+- **Wallet Connection**: OnchainKit 0.36.6 + wagmi
+- **Chain**: Base Sepolia (testnet)
+- **Smart Wallet**: Coinbase Smart Wallet (ERC-4337) with "smartWalletOnly" preference
+- **Gasless Transactions**: Paymaster support for sponsored transactions (requires VITE_PAYMASTER_URL env var)
+- **Smart Contract**: StrategyRegistry.sol (deployment pending - requires test ETH)
 
 ## Project Architecture
 
@@ -43,6 +52,9 @@ MVP is complete with the following features:
 - `client/src/App.tsx` - Main app with routing
 - `client/src/pages/` - Page components
 - `client/src/components/` - Reusable UI components
+- `client/src/lib/wagmi.ts` - Wagmi config with Smart Wallet connectors
+- `client/src/lib/contracts.ts` - Smart contract ABI and address
+- `contracts/StrategyRegistry.sol` - Solidity contract for onchain strategy recording
 
 ## API Endpoints
 - `GET /api/topics` - List all topics with subscription status

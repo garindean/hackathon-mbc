@@ -8,6 +8,7 @@ export const wagmiConfig = createConfig({
     coinbaseWallet({
       appName: "EdgeFinder",
       appLogoUrl: "https://edgefinder.app/logo.png",
+      preference: "smartWalletOnly",
     }),
     metaMask(),
     injected(),

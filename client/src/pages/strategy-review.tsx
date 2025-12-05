@@ -2,11 +2,13 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
-import { parseUnits } from "viem";
+import { useWriteContracts, useCallsStatus, useCapabilities } from "wagmi/experimental";
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -28,7 +30,8 @@ import {
   Check,
   Loader2,
   ExternalLink,
-  DollarSign
+  DollarSign,
+  Sparkles
 } from "lucide-react";
 import type { Signal, Topic } from "@shared/schema";
 import { cn } from "@/lib/utils";
@@ -49,9 +52,36 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
   const [strategyData, setStrategyData] = useState<StrategyData | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [executedTxHash, setExecutedTxHash] = useState<string | null>(null);
+  const [useGasless, setUseGasless] = useState(true);
 
-  const { isConnected, address } = useAccount();
+  const { isConnected, address, chainId } = useAccount();
+  
+  const { data: capabilities } = useCapabilities({ account: address });
+  const chainCapabilities = chainId ? capabilities?.[chainId] : undefined;
+  const hasPaymasterCapability = chainCapabilities?.paymasterService?.supported || false;
+
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
+  
+  const { 
+    writeContracts, 
+    data: batchId, 
+    isPending: isBatchPending,
+    error: batchError 
+  } = useWriteContracts();
+
+  const { data: callsStatus, isLoading: isCallsStatusLoading } = useCallsStatus({
+    id: batchId as string,
+    query: {
+      enabled: !!batchId,
+      refetchInterval: (data) => {
+        const status = data.state.data?.status;
+        if (status === "CONFIRMED" || status === "FAILED" || status === "REVERTED") {
+          return false;
+        }
+        return 1000;
+      },
+    },
+  });
   
   const { isLoading: isTxLoading, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
@@ -67,6 +97,28 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
   }, [setLocation]);
 
   useEffect(() => {
+    if (!callsStatus) return;
+    
+    if (callsStatus.status === "CONFIRMED" && callsStatus.receipts?.[0]?.transactionHash) {
+      setExecutedTxHash(callsStatus.receipts[0].transactionHash);
+      sessionStorage.removeItem("pendingStrategy");
+      queryClient.invalidateQueries({ queryKey: ["/api/strategies"] });
+      setIsExecuting(false);
+      toast({
+        title: "Strategy Executed (Gasless)",
+        description: "Your strategy has been recorded on Base Sepolia with sponsored gas!",
+      });
+    } else if (callsStatus.status === "FAILED" || callsStatus.status === "REVERTED") {
+      setIsExecuting(false);
+      toast({
+        title: "Transaction Failed",
+        description: `Gasless transaction ${callsStatus.status.toLowerCase()}. Please try again.`,
+        variant: "destructive",
+      });
+    }
+  }, [callsStatus, toast]);
+
+  useEffect(() => {
     if (isTxSuccess && txHash) {
       setExecutedTxHash(txHash);
       sessionStorage.removeItem("pendingStrategy");
@@ -79,15 +131,16 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
   }, [isTxSuccess, txHash, toast]);
 
   useEffect(() => {
-    if (writeError) {
+    const error = writeError || batchError;
+    if (error) {
       toast({
         title: "Transaction Failed",
-        description: writeError.message || "Failed to execute strategy",
+        description: error.message || "Failed to execute strategy",
         variant: "destructive",
       });
       setIsExecuting(false);
     }
-  }, [writeError, toast]);
+  }, [writeError, batchError, toast]);
 
   const { data: topic } = useQuery<Topic>({
     queryKey: ["/api/topics", strategyData?.topicId],
@@ -177,18 +230,46 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
       return;
     }
 
-    setIsExecuting(true);
-
     const marketIds = signals.map(s => s.marketId);
     const allocations = signals.map(s => BigInt(Math.floor(s.allocation * 1e6)));
     const edgeBps = signals.map(s => BigInt(Math.abs(s.edgeBps)));
 
-    writeContract({
-      address: STRATEGY_REGISTRY_ADDRESS,
-      abi: strategyRegistryAbi,
-      functionName: "recordStrategy",
-      args: [strategyData.topicId, marketIds, allocations, edgeBps],
-    });
+    if (useGasless && hasPaymasterCapability) {
+      const paymasterUrl = import.meta.env.VITE_PAYMASTER_URL;
+      if (!paymasterUrl) {
+        toast({
+          title: "Paymaster Not Configured",
+          description: "Set VITE_PAYMASTER_URL environment variable for gasless transactions.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setIsExecuting(true);
+      writeContracts({
+        contracts: [
+          {
+            address: STRATEGY_REGISTRY_ADDRESS,
+            abi: strategyRegistryAbi,
+            functionName: "recordStrategy",
+            args: [strategyData.topicId, marketIds, allocations, edgeBps],
+          },
+        ],
+        capabilities: {
+          paymasterService: {
+            url: paymasterUrl,
+          },
+        },
+      });
+    } else {
+      setIsExecuting(true);
+      writeContract({
+        address: STRATEGY_REGISTRY_ADDRESS,
+        abi: strategyRegistryAbi,
+        functionName: "recordStrategy",
+        args: [strategyData.topicId, marketIds, allocations, edgeBps],
+      });
+    }
   };
 
   const handleExecuteSimulated = async () => {
@@ -227,7 +308,7 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
     }
   };
 
-  const isLoading = isExecuting || isWritePending || isTxLoading;
+  const isLoading = isExecuting || isWritePending || isBatchPending || isTxLoading || isCallsStatusLoading;
 
   if (!strategyData) {
     return null;
@@ -379,11 +460,35 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
         </CardContent>
         <CardFooter className="flex-col gap-4">
           <Separator />
+          
+          {STRATEGY_REGISTRY_ADDRESS !== "0x0000000000000000000000000000000000000000" && (
+            <div className="flex items-center justify-between w-full p-3 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-chart-3" />
+                <Label htmlFor="gasless-toggle" className="text-sm font-medium">
+                  Gasless Transaction
+                </Label>
+                <Badge variant="secondary" className="text-xs">
+                  {hasPaymasterCapability ? "Available" : "Smart Wallet Required"}
+                </Badge>
+              </div>
+              <Switch
+                id="gasless-toggle"
+                checked={useGasless}
+                onCheckedChange={setUseGasless}
+                disabled={!hasPaymasterCapability}
+                data-testid="switch-gasless"
+              />
+            </div>
+          )}
+          
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full">
             <div className="text-sm text-muted-foreground">
               {STRATEGY_REGISTRY_ADDRESS === "0x0000000000000000000000000000000000000000" 
                 ? "Simulated execution (contract not deployed)"
-                : "Executing on Base Sepolia testnet"}
+                : useGasless && hasPaymasterCapability 
+                  ? "Gasless execution on Base Sepolia (sponsored)" 
+                  : "Executing on Base Sepolia testnet"}
             </div>
             <Button
               size="lg"
@@ -395,7 +500,12 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  {isTxLoading ? "Confirming..." : "Executing..."}
+                  {isTxLoading || isCallsStatusLoading ? "Confirming..." : "Executing..."}
+                </>
+              ) : useGasless && hasPaymasterCapability ? (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  Execute Gasless
                 </>
               ) : (
                 <>
