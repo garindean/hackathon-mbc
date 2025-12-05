@@ -1,7 +1,10 @@
-import { useState, useCallback } from "react";
 import { Switch, Route } from "wouter";
-import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { WagmiProvider } from "wagmi";
+import { OnchainKitProvider } from "@coinbase/onchainkit";
+import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { queryClient } from "./lib/queryClient";
+import { wagmiConfig, baseSepolia } from "./lib/wagmi";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -11,6 +14,8 @@ import TopicsPage from "@/pages/topics";
 import TopicDetailPage from "@/pages/topic-detail";
 import StrategyReviewPage from "@/pages/strategy-review";
 import HistoryPage from "@/pages/history";
+
+import "@coinbase/onchainkit/styles.css";
 
 function Router({ walletAddress }: { walletAddress: string | null }) {
   return (
@@ -32,43 +37,53 @@ function Router({ walletAddress }: { walletAddress: string | null }) {
   );
 }
 
-function App() {
-  const [walletAddress, setWalletAddress] = useState<string | null>(() => {
-    return localStorage.getItem("mockWalletAddress");
-  });
+function AppContent() {
+  const { address, isConnected } = useAccount();
+  const { connect, connectors } = useConnect();
+  const { disconnect } = useDisconnect();
 
-  const handleConnect = useCallback(() => {
-    const mockAddress = "0x" + Array.from({ length: 40 }, () => 
-      Math.floor(Math.random() * 16).toString(16)
-    ).join("");
-    setWalletAddress(mockAddress);
-    localStorage.setItem("mockWalletAddress", mockAddress);
-    queryClient.invalidateQueries();
-  }, []);
+  const walletAddress = isConnected && address ? address : null;
 
-  const handleDisconnect = useCallback(() => {
-    setWalletAddress(null);
-    localStorage.removeItem("mockWalletAddress");
+  const handleConnect = () => {
+    const coinbaseConnector = connectors.find(c => c.id === "coinbaseWalletSDK");
+    const connector = coinbaseConnector || connectors[0];
+    if (connector) {
+      connect({ connector });
+    }
+  };
+
+  const handleDisconnect = () => {
+    disconnect();
     queryClient.invalidateQueries();
-  }, []);
+  };
 
   return (
+    <div className="min-h-screen bg-background">
+      <Navigation
+        walletAddress={walletAddress}
+        onConnect={handleConnect}
+        onDisconnect={handleDisconnect}
+      />
+      <main>
+        <Router walletAddress={walletAddress} />
+      </main>
+    </div>
+  );
+}
+
+function App() {
+  return (
     <ThemeProvider defaultTheme="dark" storageKey="edgefinder-theme">
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <div className="min-h-screen bg-background">
-            <Navigation
-              walletAddress={walletAddress}
-              onConnect={handleConnect}
-              onDisconnect={handleDisconnect}
-            />
-            <main>
-              <Router walletAddress={walletAddress} />
-            </main>
-          </div>
-          <Toaster />
-        </TooltipProvider>
-      </QueryClientProvider>
+      <WagmiProvider config={wagmiConfig}>
+        <QueryClientProvider client={queryClient}>
+          <OnchainKitProvider chain={baseSepolia}>
+            <TooltipProvider>
+              <AppContent />
+              <Toaster />
+            </TooltipProvider>
+          </OnchainKitProvider>
+        </QueryClientProvider>
+      </WagmiProvider>
     </ThemeProvider>
   );
 }
