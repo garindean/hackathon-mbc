@@ -17,6 +17,14 @@ export default function TopicsPage({ walletAddress }: TopicsPageProps) {
 
   const { data: topics, isLoading, error } = useQuery<TopicWithSubscription[]>({
     queryKey: ["/api/topics", walletAddress],
+    queryFn: async () => {
+      const url = walletAddress 
+        ? `/api/topics?userAddress=${encodeURIComponent(walletAddress)}`
+        : "/api/topics";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch topics");
+      return res.json();
+    },
   });
 
   const subscribeMutation = useMutation({
