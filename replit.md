@@ -61,12 +61,25 @@ contracts/
 | GET | /api/polymarket/markets/:slug | Market detail with order book |
 | GET | /api/polymarket/price-history/:tokenId | Price history for charts |
 
+## Trading Terminal (/markets/:slug)
+
+Professional market detail pages with real-time data:
+
+- **Header** - Market question, YES/NO prices, expiry date, 24h change, volume
+- **Price Chart** - Area line chart with timeframe selectors (1h, 1d, 1w, All)
+- **Order Book** - Live bid/ask depth from CLOB API with visual depth bars
+- **Trade Ticket** - Buy/Sell interface with amount input and execution preview
+- **Tabs** - My Positions, My Orders, Trades, Top Traders, Holders, News, Comments, AI Insights
+- **AI Insights** - Recommended side, fair price estimate, edge %, strategy execution
+- **Resolved Markets** - Graceful empty state when market has ended
+
 ## Polymarket Integration
 
 - **Gamma API** - Fetches active markets, filters by topic keywords
 - **CLOB API** - Real-time order books and price history
 - **Price History Intervals** - 1h, 1d, 1w, max
 - **Caching** - 1 minute cache to reduce API calls
+- **Slug Resolution** - Handles both event URLs and direct market slugs
 
 ## Smart Contract
 

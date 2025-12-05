@@ -516,18 +516,10 @@ contract StrategyRegistry {
 
 2. **Simulated PnL**: Portfolio performance uses Monte Carlo simulation based on AI fair prices, not actual market resolution data.
 
-3. **Backtesting Caveats**: Historical performance projections are simulated, not based on real historical outcomes.
-
-4. **Gasless Requires Configuration**: Gasless transactions only work when `VITE_PAYMASTER_URL` is set with a valid Coinbase Paymaster endpoint.
+3. **Gasless Requires Configuration**: Gasless transactions only work when `VITE_PAYMASTER_URL` is set with a valid Coinbase Paymaster endpoint.
 
 ## Future Improvements
 
-- [x] Deploy StrategyRegistry contract to Base Sepolia
-- [ ] Add Polymarket resolution API integration for real PnL
-- [ ] Implement actual position tracking on Polymarket
-- [ ] Add historical performance analytics with real data
-- [ ] Support Base mainnet deployment
-- [ ] Add multi-wallet support
 
 ## License
 
