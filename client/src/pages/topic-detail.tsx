@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { SignalCard } from "@/components/signal-card";
 import { StrategyBuilder } from "@/components/strategy-builder";
 import { EmptyState } from "@/components/empty-state";
@@ -21,7 +22,9 @@ import {
   Zap,
   Building2,
   Users,
-  Sparkles
+  Sparkles,
+  Bell,
+  BellRing
 } from "lucide-react";
 import type { Topic, Signal, SignalWithActions, TopicWithSubscription } from "@shared/schema";
 import { cn } from "@/lib/utils";
@@ -41,20 +44,42 @@ interface TopicDetailPageProps {
   walletAddress?: string | null;
 }
 
+const AUTO_REFRESH_INTERVAL = 30000;
+
 export default function TopicDetailPage({ walletAddress }: TopicDetailPageProps) {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   
   const [selectedSignals, setSelectedSignals] = useState<Map<string, SignalWithActions>>(new Map());
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const prevSignalCountRef = useRef<number | null>(null);
 
   const { data: topic, isLoading: topicLoading } = useQuery<TopicWithSubscription>({
     queryKey: ["/api/topics", id, walletAddress],
   });
 
-  const { data: signals, isLoading: signalsLoading, refetch: refetchSignals } = useQuery<Signal[]>({
+  const { data: signals, isLoading: signalsLoading, refetch: refetchSignals, dataUpdatedAt } = useQuery<Signal[]>({
     queryKey: ["/api/topics", id, "signals"],
+    refetchInterval: autoRefresh ? AUTO_REFRESH_INTERVAL : false,
   });
+
+  useEffect(() => {
+    if (!signals || signalsLoading) return;
+    
+    const activeCount = signals.filter(s => s.status === "active").length;
+    
+    if (prevSignalCountRef.current !== null && activeCount > prevSignalCountRef.current && notificationsEnabled) {
+      const newCount = activeCount - prevSignalCountRef.current;
+      toast({
+        title: "New Signals Detected",
+        description: `${newCount} new trading signal${newCount > 1 ? 's' : ''} available`,
+      });
+    }
+    
+    prevSignalCountRef.current = activeCount;
+  }, [signals, signalsLoading, notificationsEnabled, toast]);
 
   const subscribeMutation = useMutation({
     mutationFn: async () => {
@@ -252,7 +277,31 @@ export default function TopicDetailPage({ walletAddress }: TopicDetailPageProps)
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-muted/50">
+              <RefreshCw className={cn("h-3.5 w-3.5 text-muted-foreground", autoRefresh && "text-chart-3")} />
+              <span className="text-xs text-muted-foreground">Auto</span>
+              <Switch
+                checked={autoRefresh}
+                onCheckedChange={setAutoRefresh}
+                className="scale-75"
+                data-testid="switch-auto-refresh"
+              />
+            </div>
+            <Button
+              size="icon"
+              variant={notificationsEnabled ? "secondary" : "ghost"}
+              className="toggle-elevate"
+              onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+              title={notificationsEnabled ? "Notifications on" : "Notifications off"}
+              data-testid="button-notifications"
+            >
+              {notificationsEnabled ? (
+                <BellRing className="h-4 w-4" />
+              ) : (
+                <Bell className="h-4 w-4 text-muted-foreground" />
+              )}
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -262,7 +311,7 @@ export default function TopicDetailPage({ walletAddress }: TopicDetailPageProps)
               data-testid="button-scan"
             >
               <RefreshCw className={cn("h-4 w-4", scanMutation.isPending && "animate-spin")} />
-              {scanMutation.isPending ? "Scanning..." : "Scan for Signals"}
+              {scanMutation.isPending ? "Scanning..." : "Scan"}
             </Button>
             <Button
               variant={topic.isSubscribed ? "secondary" : "outline"}
@@ -300,11 +349,18 @@ export default function TopicDetailPage({ walletAddress }: TopicDetailPageProps)
 
       <div className="lg:grid lg:grid-cols-3 lg:gap-8">
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Active Signals</h2>
-            <Badge variant="secondary">
-              {signalsWithActions.length} available
-            </Badge>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-semibold">Active Signals</h2>
+              <Badge variant="secondary">
+                {signalsWithActions.length} available
+              </Badge>
+            </div>
+            {dataUpdatedAt && (
+              <span className="text-xs text-muted-foreground font-mono" data-testid="text-last-updated">
+                Updated {new Date(dataUpdatedAt).toLocaleTimeString()}
+              </span>
+            )}
           </div>
 
           {signalsLoading ? (

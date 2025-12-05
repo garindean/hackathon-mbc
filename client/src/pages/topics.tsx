@@ -84,7 +84,7 @@ export default function TopicsPage({ walletAddress }: TopicsPageProps) {
   };
 
   const handleTopicClick = (topicId: string) => {
-    setLocation(`/topic/${topicId}`);
+    setLocation(`/topics/${topicId}`);
   };
 
   if (isLoading) {

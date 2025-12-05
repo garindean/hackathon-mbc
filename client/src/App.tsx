@@ -23,7 +23,7 @@ function Router({ walletAddress }: { walletAddress: string | null }) {
       <Route path="/">
         <TopicsPage walletAddress={walletAddress} />
       </Route>
-      <Route path="/topic/:id">
+      <Route path="/topics/:id">
         <TopicDetailPage walletAddress={walletAddress} />
       </Route>
       <Route path="/strategy/review">
