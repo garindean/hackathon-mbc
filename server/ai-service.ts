@@ -393,3 +393,84 @@ export async function fetchMarketsForTopic(
     return [];
   }
 }
+
+// Analyze a single market and return AI insights
+export async function analyzeSingleMarket(market: {
+  id: string;
+  question: string;
+  description?: string;
+  yesPrice: number;
+  volume?: number;
+  endDate?: string;
+}): Promise<{
+  recommendedSide: "YES" | "NO";
+  aiFairPrice: number;
+  marketPrice: number;
+  edgeBps: number;
+  explanation: string;
+} | null> {
+  const prompt = `You are an expert prediction market analyst. Analyze this prediction market and estimate the fair probability.
+
+Market Question: ${market.question}
+${market.description ? `Description: ${market.description}` : ''}
+Current YES Price: ${(market.yesPrice * 100).toFixed(1)}%
+${market.volume ? `Volume: $${market.volume.toLocaleString()}` : ''}
+${market.endDate ? `Resolution Date: ${market.endDate}` : ''}
+
+Provide your analysis:
+1. Your estimated fair probability (0-100%) for the YES outcome
+2. Whether to bet YES or NO based on current pricing
+3. A brief 2-3 sentence explanation of your reasoning
+
+Respond in JSON format:
+{
+  "aiProbability": number (0-100),
+  "side": "YES" or "NO",
+  "explanation": "string"
+}
+
+Be analytical and provide specific reasoning based on available information.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: MODEL,
+      messages: [
+        {
+          role: "system",
+          content: "You are an expert prediction market analyst. Provide accurate probability estimates based on available information. Always respond with valid JSON."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      response_format: { type: "json_object" },
+      max_completion_tokens: 1024,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      return null;
+    }
+
+    const parsed = JSON.parse(content);
+    const aiYesProb = parsed.aiProbability / 100;
+    const isYesSide = parsed.side === "YES";
+    
+    // Calculate edge based on the recommended side
+    const marketSidePrice = isYesSide ? market.yesPrice : (1 - market.yesPrice);
+    const aiFairSidePrice = isYesSide ? aiYesProb : (1 - aiYesProb);
+    const edgeBps = Math.round((aiFairSidePrice - marketSidePrice) * 10000);
+
+    return {
+      recommendedSide: parsed.side,
+      aiFairPrice: aiFairSidePrice,
+      marketPrice: marketSidePrice,
+      edgeBps: Math.max(edgeBps, 0),
+      explanation: parsed.explanation,
+    };
+  } catch (error) {
+    console.error("AI single market analysis error:", error);
+    return null;
+  }
+}

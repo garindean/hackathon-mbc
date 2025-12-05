@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { analyzeMarkets, createSignalsFromAnalysis, fetchMarketsForTopic } from "./ai-service";
+import { analyzeMarkets, createSignalsFromAnalysis, fetchMarketsForTopic, analyzeSingleMarket } from "./ai-service";
 
 // Validation schemas
 const subscribeSchema = z.object({
@@ -454,67 +454,116 @@ export async function registerRoutes(
     }
   });
 
-  // Get trades for market
+  // Get trades for market from Polymarket Data-API
   app.get("/api/markets/:slug/trades", async (req: Request, res: Response) => {
     try {
       const { slug } = req.params;
       
-      // Generate mock trades
-      const now = Date.now();
-      const trades = Array.from({ length: 25 }, (_, i) => ({
-        id: `trade-${slug}-${i}`,
-        outcome: Math.random() > 0.5 ? "YES" : "NO",
-        type: Math.random() > 0.5 ? "BUY" : "SELL",
-        price: 0.3 + Math.random() * 0.4,
-        amount: Math.floor(Math.random() * 500) + 50,
-        totalUsd: Math.floor(Math.random() * 2000) + 100,
-        timestamp: new Date(now - i * Math.floor(Math.random() * 3600000)).toISOString(),
-        trader: `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`,
+      // Fetch market to get condition ID
+      const market = await fetchMarketBySlug(slug);
+      if (!market || !market.conditionId) {
+        return res.json([]);
+      }
+      
+      // Fetch real trades from Polymarket Data-API
+      const tradesResponse = await fetch(
+        `https://data-api.polymarket.com/trades?market=${market.conditionId}&limit=50`,
+        {
+          headers: { "Accept": "application/json" },
+          signal: AbortSignal.timeout(10000),
+        }
+      );
+      
+      if (!tradesResponse.ok) {
+        console.log("Trades API returned non-OK status:", tradesResponse.status);
+        return res.json([]);
+      }
+      
+      const rawTrades = await tradesResponse.json();
+      
+      // Transform to our format
+      const trades = (rawTrades || []).map((trade: any, idx: number) => ({
+        id: trade.transactionHash || `trade-${idx}`,
+        outcome: trade.outcome?.toUpperCase() || (trade.outcomeIndex === 0 ? "YES" : "NO"),
+        type: trade.side?.toUpperCase() || "BUY",
+        price: parseFloat(trade.price) || 0.5,
+        amount: parseFloat(trade.size) || 0,
+        totalUsd: (parseFloat(trade.price) || 0.5) * (parseFloat(trade.size) || 0),
+        timestamp: trade.timestamp ? new Date(trade.timestamp * 1000).toISOString() : new Date().toISOString(),
+        trader: trade.proxyWallet || trade.maker || "0x0000000000000000000000000000000000000000",
       }));
       
       res.json(trades);
     } catch (error) {
       console.error("Error fetching trades:", error);
-      res.status(500).json({ error: "Failed to fetch trades" });
+      res.json([]);
     }
   });
 
-  // Get leaderboard for market
+  // Get leaderboard/holders for market from Polymarket Data-API
   app.get("/api/markets/:slug/leaderboard", async (req: Request, res: Response) => {
     try {
       const { slug } = req.params;
       
-      // Generate mock leaderboard
-      const traders = Array.from({ length: 15 }, (_, i) => {
-        const position = Math.random() > 0.5 ? "YES" : "NO";
-        const size = Math.floor(Math.random() * 10000) + 500;
-        const avgEntry = 0.3 + Math.random() * 0.3;
-        const currentPrice = 0.4 + Math.random() * 0.2;
-        const pnl = (currentPrice - avgEntry) * size * (position === "YES" ? 1 : -1);
+      // Fetch market to get token ID
+      const market = await fetchMarketBySlug(slug);
+      if (!market || !market.clobTokenIds || market.clobTokenIds.length === 0) {
+        return res.json([]);
+      }
+      
+      // Get YES token ID
+      const outcomes = market.outcomes || ["Yes", "No"];
+      const yesIdx = outcomes.findIndex((o: string) => o.toLowerCase() === "yes");
+      const yesTokenId = market.clobTokenIds[yesIdx >= 0 ? yesIdx : 0];
+      
+      // Fetch top holders from Polymarket Data-API
+      const holdersResponse = await fetch(
+        `https://data-api.polymarket.com/holders?tokenId=${yesTokenId}&limit=20`,
+        {
+          headers: { "Accept": "application/json" },
+          signal: AbortSignal.timeout(10000),
+        }
+      );
+      
+      if (!holdersResponse.ok) {
+        console.log("Holders API returned non-OK status:", holdersResponse.status);
+        return res.json([]);
+      }
+      
+      const holders = await holdersResponse.json();
+      
+      // Transform to our format
+      const traders = (holders || []).map((holder: any) => {
+        const size = parseFloat(holder.amount) || parseFloat(holder.balance) || 0;
+        const avgEntry = parseFloat(holder.avgPrice) || 0.5;
+        const currentPrice = market.yesPrice;
+        const pnl = (currentPrice - avgEntry) * size;
         
         return {
-          address: `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`,
-          position,
+          address: holder.address || holder.proxyWallet || "0x0000000000000000000000000000000000000000",
+          position: "YES",
           size,
           avgEntry,
           currentPrice,
           pnl,
-          pnlPercent: (pnl / (size * avgEntry)) * 100,
-          firstEntry: new Date(Date.now() - Math.floor(Math.random() * 30 * 24 * 3600000)).toISOString(),
+          pnlPercent: avgEntry > 0 ? (pnl / (size * avgEntry)) * 100 : 0,
+          firstEntry: holder.firstBought || new Date().toISOString(),
+          name: holder.name || holder.pseudonym || null,
+          profileImage: holder.profileImage || null,
         };
       });
       
-      // Sort by absolute PnL
-      traders.sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
+      // Sort by position size
+      traders.sort((a: any, b: any) => b.size - a.size);
       
       res.json(traders);
     } catch (error) {
       console.error("Error fetching leaderboard:", error);
-      res.status(500).json({ error: "Failed to fetch leaderboard" });
+      res.json([]);
     }
   });
 
-  // Get AI insights for market
+  // Get AI insights for market using real OpenAI analysis
   app.get("/api/markets/:slug/ai-insights", async (req: Request, res: Response) => {
     try {
       const { slug } = req.params;
@@ -526,22 +575,32 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Market not found" });
       }
       
-      // Generate AI insight based on market
-      const marketPrice = market.yesPrice;
-      const aiFairPrice = Math.max(0.05, Math.min(0.95, marketPrice + (Math.random() - 0.4) * 0.15));
-      const recommendedSide = aiFairPrice > marketPrice ? "YES" : "NO";
-      const edgeBps = Math.abs(Math.round((aiFairPrice - marketPrice) * 10000));
+      // Use real AI to analyze the market
+      const analysis = await analyzeSingleMarket({
+        id: market.id,
+        question: market.question,
+        description: market.description,
+        yesPrice: market.yesPrice,
+        volume: market.totalVolume,
+        endDate: market.endDate,
+      });
       
-      const insights = {
+      if (!analysis) {
+        // Fallback if AI fails
+        return res.json({
+          marketId: slug,
+          recommendedSide: market.yesPrice > 0.5 ? "NO" : "YES",
+          aiFairPrice: market.yesPrice > 0.5 ? 1 - market.yesPrice : market.yesPrice,
+          marketPrice: market.yesPrice,
+          edgeBps: 300,
+          explanation: "AI analysis temporarily unavailable. Please try again later.",
+        });
+      }
+      
+      res.json({
         marketId: slug,
-        recommendedSide,
-        aiFairPrice,
-        marketPrice,
-        edgeBps: Math.max(edgeBps, 300), // Minimum 3% edge
-        explanation: `Based on analysis of market sentiment, recent news, and historical patterns, the current ${recommendedSide} price appears undervalued. The market may be overreacting to recent events, creating a potential opportunity.`,
-      };
-      
-      res.json(insights);
+        ...analysis,
+      });
     } catch (error) {
       console.error("Error fetching AI insights:", error);
       res.status(500).json({ error: "Failed to fetch AI insights" });
