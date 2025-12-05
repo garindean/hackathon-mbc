@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
+import { parseUnits } from "viem";
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { strategyRegistryAbi, STRATEGY_REGISTRY_ADDRESS } from "@/lib/contracts";
 import {
   ArrowLeft,
   Wallet,
@@ -47,6 +50,13 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
   const [isExecuting, setIsExecuting] = useState(false);
   const [executedTxHash, setExecutedTxHash] = useState<string | null>(null);
 
+  const { isConnected, address } = useAccount();
+  const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
+  
+  const { isLoading: isTxLoading, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
+
   useEffect(() => {
     const stored = sessionStorage.getItem("pendingStrategy");
     if (stored) {
@@ -55,6 +65,29 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
       setLocation("/");
     }
   }, [setLocation]);
+
+  useEffect(() => {
+    if (isTxSuccess && txHash) {
+      setExecutedTxHash(txHash);
+      sessionStorage.removeItem("pendingStrategy");
+      queryClient.invalidateQueries({ queryKey: ["/api/strategies"] });
+      toast({
+        title: "Strategy Executed",
+        description: "Your strategy has been recorded on Base Sepolia",
+      });
+    }
+  }, [isTxSuccess, txHash, toast]);
+
+  useEffect(() => {
+    if (writeError) {
+      toast({
+        title: "Transaction Failed",
+        description: writeError.message || "Failed to execute strategy",
+        variant: "destructive",
+      });
+      setIsExecuting(false);
+    }
+  }, [writeError, toast]);
 
   const { data: topic } = useQuery<Topic>({
     queryKey: ["/api/topics", strategyData?.topicId],
@@ -114,7 +147,7 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
       queryClient.invalidateQueries({ queryKey: ["/api/strategies"] });
       toast({
         title: "Strategy Executed",
-        description: "Your strategy has been submitted to Base Sepolia",
+        description: "Your strategy has been recorded",
       });
     },
     onError: (error: any) => {
@@ -126,7 +159,39 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
     },
   });
 
-  const handleExecute = async () => {
+  const handleExecuteOnchain = async () => {
+    if (!strategyData || !isConnected || !address) {
+      toast({
+        title: "Connect Wallet",
+        description: "Please connect your wallet to execute onchain",
+      });
+      return;
+    }
+
+    if (STRATEGY_REGISTRY_ADDRESS === "0x0000000000000000000000000000000000000000") {
+      toast({
+        title: "Contract Not Deployed",
+        description: "Using simulated execution. Deploy the contract for real onchain transactions.",
+      });
+      await handleExecuteSimulated();
+      return;
+    }
+
+    setIsExecuting(true);
+
+    const marketIds = signals.map(s => s.marketId);
+    const allocations = signals.map(s => BigInt(Math.floor(s.allocation * 1e6)));
+    const edgeBps = signals.map(s => BigInt(Math.abs(s.edgeBps)));
+
+    writeContract({
+      address: STRATEGY_REGISTRY_ADDRESS,
+      abi: strategyRegistryAbi,
+      functionName: "recordStrategy",
+      args: [strategyData.topicId, marketIds, allocations, edgeBps],
+    });
+  };
+
+  const handleExecuteSimulated = async () => {
     if (!walletAddress) {
       toast({
         title: "Connect Wallet",
@@ -141,6 +206,8 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
       setIsExecuting(false);
     }
   };
+
+  const handleExecute = handleExecuteOnchain;
 
   const getRiskColor = (level: string) => {
     switch (level) {
@@ -159,6 +226,8 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
       default: return null;
     }
   };
+
+  const isLoading = isExecuting || isWritePending || isTxLoading;
 
   if (!strategyData) {
     return null;
@@ -312,19 +381,21 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
           <Separator />
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full">
             <div className="text-sm text-muted-foreground">
-              Executing on Base Sepolia testnet
+              {STRATEGY_REGISTRY_ADDRESS === "0x0000000000000000000000000000000000000000" 
+                ? "Simulated execution (contract not deployed)"
+                : "Executing on Base Sepolia testnet"}
             </div>
             <Button
               size="lg"
               className="w-full sm:w-auto gap-2"
               onClick={handleExecute}
-              disabled={isExecuting || !walletAddress}
+              disabled={isLoading || !walletAddress}
               data-testid="button-execute"
             >
-              {isExecuting ? (
+              {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Executing...
+                  {isTxLoading ? "Confirming..." : "Executing..."}
                 </>
               ) : (
                 <>
