@@ -23,6 +23,13 @@ const updateSignalSchema = z.object({
   status: z.enum(["active", "dismissed", "added"]),
 });
 
+const marketExecuteSchema = z.object({
+  userAddress: z.string().min(1, "userAddress is required"),
+  allocation: z.number().min(0, "allocation must be positive"),
+  edgeBps: z.number().min(0, "edgeBps must be positive"),
+  riskLevel: z.string().optional(),
+});
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -477,10 +484,18 @@ export async function registerRoutes(
   app.post("/api/markets/:slug/execute", async (req: Request, res: Response) => {
     try {
       const { slug } = req.params;
-      const { userAddress, allocation, edgeBps, riskLevel } = req.body;
       
-      if (!userAddress) {
-        return res.status(400).json({ error: "userAddress is required" });
+      // Validate request body
+      const result = marketExecuteSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.errors[0].message });
+      }
+      const { userAddress, allocation, edgeBps, riskLevel } = result.data;
+      
+      // Verify market exists
+      const market = await fetchMarketBySlug(slug);
+      if (!market) {
+        return res.status(404).json({ error: "Market not found" });
       }
       
       // Simulate blockchain transaction
@@ -490,11 +505,12 @@ export async function registerRoutes(
       
       res.json({
         marketId: slug,
+        marketQuestion: market.question,
         txHash: mockTxHash,
         status: "executed",
         allocation,
         edgeBps,
-        riskLevel,
+        riskLevel: riskLevel || "medium",
       });
     } catch (error) {
       console.error("Error executing market strategy:", error);

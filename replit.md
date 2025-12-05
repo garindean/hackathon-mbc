@@ -17,8 +17,18 @@ MVP is complete with the following features:
 - Portfolio tracking dashboard with positions and PnL
 - Real-time signal refresh with notification system
 - Backtesting visualization with Monte Carlo simulation
+- **Trading Terminal** - Individual market pages with professional dark UI
 - Dark/light mode support
 - Responsive design for mobile and desktop
+
+## Trading Terminal (/markets/:marketSlug)
+Individual market detail pages with a professional trading interface:
+- **Header**: Market question, YES/NO prices, expiry countdown, 24h change, volume stats
+- **Price Chart**: Interactive chart with 1h/1d/1w/All timeframe selectors
+- **Order Book**: Visual bid/ask depth with percentage distribution
+- **Trade Ticket**: Buy/Sell interface with amount input and execution preview
+- **Bottom Tabs**: My Positions, My Orders, Trades, Top Traders, Holders, News, Comments, AI Insights
+- **AI Insights Tab**: Shows AI-recommended side, fair price estimate, edge percentage, and strategy execution
 
 ## Polymarket Integration
 - **Gamma API**: Fetches 200 active markets from `https://gamma-api.polymarket.com/markets`
