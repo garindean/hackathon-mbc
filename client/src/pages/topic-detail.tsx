@@ -59,11 +59,26 @@ export default function TopicDetailPage({ walletAddress }: TopicDetailPageProps)
 
   const { data: topic, isLoading: topicLoading } = useQuery<TopicWithSubscription>({
     queryKey: ["/api/topics", id, walletAddress],
+    queryFn: async () => {
+      const url = walletAddress 
+        ? `/api/topics/${id}?userAddress=${encodeURIComponent(walletAddress)}`
+        : `/api/topics/${id}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch topic");
+      return res.json();
+    },
+    enabled: !!id,
   });
 
   const { data: signals, isLoading: signalsLoading, refetch: refetchSignals, dataUpdatedAt } = useQuery<Signal[]>({
     queryKey: ["/api/topics", id, "signals"],
+    queryFn: async () => {
+      const res = await fetch(`/api/topics/${id}/signals`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch signals");
+      return res.json();
+    },
     refetchInterval: autoRefresh ? AUTO_REFRESH_INTERVAL : false,
+    enabled: !!id,
   });
 
   useEffect(() => {
