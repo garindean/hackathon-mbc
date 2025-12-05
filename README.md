@@ -1,6 +1,6 @@
-# EdgeFinder - AI-Powered Prediction Market Strategy Platform
+# BasePredict - AI-Powered Prediction Market Strategy Platform
 
-EdgeFinder is a Base-native prediction market strategy platform that uses AI to detect mispricing opportunities in prediction markets. The platform fetches real market data from Polymarket, analyzes it with OpenAI, and enables users to build and execute trading strategies with optional gasless transactions.
+BasePredict is a Base-native prediction market strategy platform that uses AI to detect mispricing opportunities in prediction markets. The platform fetches real market data from Polymarket, analyzes it with OpenAI, and enables users to build and execute trading strategies with optional gasless transactions.
 
 ## Features
 
@@ -218,7 +218,7 @@ strategy_signals (
 
 ## Polymarket Integration
 
-EdgeFinder integrates with Polymarket's APIs to fetch real prediction market data:
+BasePredict integrates with Polymarket's APIs to fetch real prediction market data:
 
 ### Data Flow
 ```
@@ -337,8 +337,7 @@ To enable gasless transactions:
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/edgefinder.git
-cd edgefinder
+git clone https://github.com/garindean/hackathon-mbc
 ```
 
 ### Step 2: Install Dependencies
@@ -352,10 +351,10 @@ npm install
 **Option A: Local PostgreSQL**
 ```bash
 # Create database
-createdb edgefinder
+createdb basepredict
 
 # Your connection string will be:
-# postgresql://localhost:5432/edgefinder
+# postgresql://localhost:5432/basepredict
 ```
 
 **Option B: Cloud PostgreSQL (Neon - recommended)**
@@ -369,7 +368,7 @@ Create a `.env` file in the project root:
 
 ```bash
 # Database
-DATABASE_URL=postgresql://username:password@host:5432/edgefinder
+DATABASE_URL=postgresql://username:password@host:5432/basepredict
 
 # Session
 SESSION_SECRET=your-secret-key-here-make-it-long-and-random
