@@ -406,10 +406,13 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={candleData}>
+                    <ComposedChart data={candleData} barGap={0} barCategoryGap="5%">
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis
                         dataKey="timestamp"
+                        type="number"
+                        scale="time"
+                        domain={["dataMin", "dataMax"]}
                         tickFormatter={(val) => {
                           const date = new Date(val);
                           return timeframe === "All" 
@@ -418,7 +421,6 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
                         }}
                         stroke="hsl(var(--muted-foreground))"
                         fontSize={11}
-                        interval="preserveStartEnd"
                       />
                       <YAxis
                         domain={["auto", "auto"]}
@@ -439,7 +441,7 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
                           return [`${(val * 100).toFixed(2)}%`, name.charAt(0).toUpperCase() + name.slice(1)];
                         }}
                       />
-                      <Bar dataKey="wick" barSize={1} isAnimationActive={false}>
+                      <Bar dataKey="wick" barSize={2} isAnimationActive={false}>
                         {candleData.map((entry, index) => (
                           <Cell 
                             key={`wick-${index}`}
@@ -447,7 +449,7 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
                           />
                         ))}
                       </Bar>
-                      <Bar dataKey="body" barSize={8} isAnimationActive={false}>
+                      <Bar dataKey="body" barSize={10} isAnimationActive={false}>
                         {candleData.map((entry, index) => (
                           <Cell 
                             key={`body-${index}`}
@@ -466,68 +468,77 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
             <Card className="p-4 h-full">
               <h3 className="font-medium text-sm mb-3">Order Book (Yes)</h3>
 
-              {orderBook && orderBook.bids.length > 0 && orderBook.asks.length > 0 && (
-                <>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div
-                      className="h-2 bg-emerald-500 rounded-l"
-                      style={{ width: `${orderBook.bidPercent}%` }}
-                    />
-                    <div
-                      className="h-2 bg-rose-500 rounded-r"
-                      style={{ width: `${orderBook.askPercent}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-xs text-muted-foreground mb-3">
-                    <span>B {orderBook.bidPercent}%</span>
-                    <span>{orderBook.askPercent}% S</span>
-                  </div>
-
-                  <div className="space-y-1 text-xs">
-                    <div className="grid grid-cols-3 text-muted-foreground border-b border-border pb-1">
-                      <span>Price</span>
-                      <span className="text-right">Shares</span>
-                      <span className="text-right">USD</span>
+              {orderBook && orderBook.bids.length > 0 && orderBook.asks.length > 0 && (() => {
+                const displayedAsks = orderBook.asks.slice(0, 5);
+                const displayedBids = orderBook.bids.slice(0, 5);
+                const maxShares = Math.max(
+                  ...displayedAsks.map(l => l.shares),
+                  ...displayedBids.map(l => l.shares),
+                  1
+                );
+                return (
+                  <>
+                    <div className="flex items-center gap-2 mb-3 overflow-hidden">
+                      <div
+                        className="h-2 bg-emerald-500 rounded-l"
+                        style={{ width: `${Math.min(orderBook.bidPercent, 100)}%` }}
+                      />
+                      <div
+                        className="h-2 bg-rose-500 rounded-r"
+                        style={{ width: `${Math.min(orderBook.askPercent, 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground mb-3">
+                      <span>B {orderBook.bidPercent}%</span>
+                      <span>{orderBook.askPercent}% S</span>
                     </div>
 
-                    {orderBook.asks.slice(0, 5).reverse().map((level, i) => (
-                      <div key={`ask-${i}`} className="grid grid-cols-3 relative">
-                        <div
-                          className="absolute inset-0 bg-rose-500/10"
-                          style={{ width: `${(level.shares / 1000) * 100}%` }}
-                        />
-                        <span className="relative text-rose-400 font-mono">
-                          {(level.price * 100).toFixed(1)}
-                        </span>
-                        <span className="relative text-right font-mono">{level.shares}</span>
-                        <span className="relative text-right font-mono text-muted-foreground">
-                          ${level.totalUsd.toFixed(0)}
-                        </span>
+                    <div className="space-y-1 text-xs overflow-hidden">
+                      <div className="grid grid-cols-3 text-muted-foreground border-b border-border pb-1">
+                        <span>Price</span>
+                        <span className="text-right">Shares</span>
+                        <span className="text-right">USD</span>
                       </div>
-                    ))}
 
-                    <div className="border-y border-border py-1 text-center font-medium">
-                      {(market.yesPrice * 100).toFixed(1)}%
+                      {displayedAsks.reverse().map((level, i) => (
+                        <div key={`ask-${i}`} className="grid grid-cols-3 relative overflow-hidden">
+                          <div
+                            className="absolute inset-0 bg-rose-500/10"
+                            style={{ width: `${Math.min((level.shares / maxShares) * 100, 100)}%` }}
+                          />
+                          <span className="relative text-rose-400 font-mono">
+                            {(level.price * 100).toFixed(1)}
+                          </span>
+                          <span className="relative text-right font-mono">{level.shares.toLocaleString()}</span>
+                          <span className="relative text-right font-mono text-muted-foreground">
+                            ${level.totalUsd.toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+
+                      <div className="border-y border-border py-1 text-center font-medium">
+                        {(market.yesPrice * 100).toFixed(1)}%
+                      </div>
+
+                      {displayedBids.map((level, i) => (
+                        <div key={`bid-${i}`} className="grid grid-cols-3 relative overflow-hidden">
+                          <div
+                            className="absolute inset-0 bg-emerald-500/10"
+                            style={{ width: `${Math.min((level.shares / maxShares) * 100, 100)}%` }}
+                          />
+                          <span className="relative text-emerald-400 font-mono">
+                            {(level.price * 100).toFixed(1)}
+                          </span>
+                          <span className="relative text-right font-mono">{level.shares.toLocaleString()}</span>
+                          <span className="relative text-right font-mono text-muted-foreground">
+                            ${level.totalUsd.toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-
-                    {orderBook.bids.slice(0, 5).map((level, i) => (
-                      <div key={`bid-${i}`} className="grid grid-cols-3 relative">
-                        <div
-                          className="absolute inset-0 bg-emerald-500/10"
-                          style={{ width: `${(level.shares / 1000) * 100}%` }}
-                        />
-                        <span className="relative text-emerald-400 font-mono">
-                          {(level.price * 100).toFixed(1)}
-                        </span>
-                        <span className="relative text-right font-mono">{level.shares}</span>
-                        <span className="relative text-right font-mono text-muted-foreground">
-                          ${level.totalUsd.toFixed(0)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
+                  </>
+                );
+              })()}
 
               {orderBook && (orderBook.bids.length === 0 || orderBook.asks.length === 0) && (
                 <div className="h-32 flex flex-col items-center justify-center text-muted-foreground">
