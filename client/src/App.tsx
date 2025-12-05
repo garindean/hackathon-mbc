@@ -15,6 +15,7 @@ import TopicDetailPage from "@/pages/topic-detail";
 import StrategyReviewPage from "@/pages/strategy-review";
 import HistoryPage from "@/pages/history";
 import PortfolioPage from "@/pages/portfolio";
+import MarketDetailPage from "@/pages/market-detail";
 
 import "@coinbase/onchainkit/styles.css";
 
@@ -35,6 +36,9 @@ function Router({ walletAddress }: { walletAddress: string | null }) {
       </Route>
       <Route path="/portfolio">
         <PortfolioPage walletAddress={walletAddress} />
+      </Route>
+      <Route path="/markets/:marketSlug">
+        <MarketDetailPage walletAddress={walletAddress} />
       </Route>
       <Route component={NotFound} />
     </Switch>

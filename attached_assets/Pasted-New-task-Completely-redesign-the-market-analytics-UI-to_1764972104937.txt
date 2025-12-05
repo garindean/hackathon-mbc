@@ -1,0 +1,272 @@
+New task
+- **Completely redesign the market analytics UI** to match the style and layout of Fireplace Pro as shown in the screenshot (dark trading terminal).
+- The new UI is for a route like: `/markets/[marketSlug]`.
+- The page must have:
+  1. A **market header bar** with key stats
+  2. A **main content row** with:
+     - Left: price chart & basic info
+     - Right: order book + trade ticket
+  3. A **bottom tab strip** with:
+     - Trades
+     - Top Traders
+     - Holders
+     - News & Events (placeholder)
+     - Comments (placeholder)
+     - **AI Insights** (this is our AI module and MUST be a separate tab/section, not mixed into the raw data tabs)
+
+Think: same overall layout and vibe as Fireplace Pro, but wired to our own APIs.
+
+Design requirements
+-------------------
+
+General
+- Dark theme, high contrast, compact trading‑desk feel.
+- Single page layout, full‑width on desktop.
+- Use simple CSS or Tailwind if already present; no heavy design system.
+- Reuse existing app header (logo, nav, wallet connect) at the top; the rest of the page should mimic Fireplace’s market view.
+
+1) Market header bar (beneath app header)
+
+- Full‑width horizontal bar at the top of the market page.
+- Left side:
+  - Market name (e.g. “50+ bps decrease / Fed decision in December?”)
+  - Small breadcrumb or subtitle for the event.
+- Just to the right of the title, show:
+  - Current YES price (or main price) as a compact chip.
+- Middle/right (horizontal stat row):
+  - Expiry date
+  - 24h change
+  - 24h volume
+  - Total volume
+  - Open interest
+  - Volatility (optional or fake for now)
+- Top‑right of this bar: search input (if already available) and wallet summary (cash, deposit button, etc.) can stay in the global header.
+
+2) Main content row
+
+Use a three‑column feel (visually similar to Fireplace):
+
+### 2.1 Left: Chart panel
+
+- Big chart container occupying ~60–65% width.
+- Upper left of this panel:
+  - Market question in a slightly smaller font than the main header.
+  - Timeframe selector buttons (1h, 1d, 1w, All).
+- The chart itself:
+  - Use any simple line/candlestick chart library (e.g. `recharts` or `react-chartjs-2`).
+  - X‑axis: time, Y‑axis: price in cents/dollars.
+  - Below chart: show volume bars if easy; otherwise omit.
+- A small “Volume” stat under the title, like the reference.
+
+Data source for this chart:
+- Use the backend market endpoint(s) you already have, or add one like:
+  - `GET /markets/:slug/price-history` returning timestamps + price/volume.
+- If not yet implemented, stub with mock data so the UI renders.
+
+### 2.2 Middle: Order book panel
+
+- Narrow column in the middle (to the right of chart).
+- Card titled “Order Book (Yes)” or “Order Book (No)”.
+- Inside:
+  - At the top, a thin horizontal bar showing **bid vs ask percentage** (“B 73% / 27% S”) like the screenshot.
+  - A vertical stacked list of price levels:
+    - Columns: `Price`, `Shares`, `Total (USD)` with depth bars for visual.
+  - Show typical ladder: highest bids and/or asks.
+
+Data source:
+- Use existing backend Polymarket integration or add:
+  - `GET /markets/:slug/order-book` returning best bids/asks.
+- If backend is not ready, fill with temporary static data.
+
+### 2.3 Right: Trade ticket
+
+- Right‑most column, matching Fireplace layout.
+- Top: Toggle buttons:
+  - “Buy” / “Sell”.
+  - “Market” (leave other order types as disabled or placeholder).
+- Below toggles:
+  - Two buttons showing “Yes [price]” and “No [price]”.
+  - Numeric input for **Amount ($)**.
+  - Simple slider for size.
+- Bottom of the card:
+  - Summary rows like:
+    - “Total”
+    - “If you win”
+    - “Resolves [date]”
+  - Primary button: “Trade” (for now this can be disabled or just log to console; actual trading is out of scope).
+
+This section is mostly **UI only** for this sprint. It does not need to interact with Polymarket; it is mainly for the demo look.
+
+3) Bottom tab strip (second row)
+
+Under the chart + order‑book row, add a full‑width tab bar similar to the screenshot.
+
+Tabs:
+
+1. **My Positions** (placeholder)
+2. **My Orders** (placeholder)
+3. **Trades** (live market trades table)
+4. **Top Traders**
+5. **Holders**
+6. **News & Events** (placeholder)
+7. **Comments** (placeholder)
+8. **AI Insights** (THIS IS THE AI MODULE – see section 4)
+
+You do not have to implement My Positions/My Orders/News/Comments fully. Minimal placeholders are fine.
+
+3.1 Trades tab
+
+- At the top of the Trades tab content, show a small summary strip:
+  - “Trader count”
+  - “Total trades”
+  - “Average trade size”
+- Below, show a table similar to Fireplace:
+  - Columns:
+    - Outcome (YES/NO)
+    - Type (BUY/SELL), colored like green/red
+    - Price
+    - Amount
+    - Total USD
+    - Age (e.g. “1m”, “3h”)
+    - Trader (wallet short address or name)
+- Add filters above the table:
+  - Dropdowns for Amount (All), Side (All), Outcome (All).
+  - Search field “Search by wallet address”.
+
+Data source:
+- Calls backend endpoint e.g. `GET /markets/:slug/trades`.
+
+3.2 Top Traders tab
+
+- Table of wallets that traded this market:
+  - Columns:
+    - Trader (pseudonym + address)
+    - Position (YES/NO, size)
+    - Avg entry price
+    - Current price
+    - Realized/Unrealized PnL
+    - First entry time
+  - Button or link in each row: “View profile” → `/traders/[wallet]`.
+  - Another button: “Copy trader” (opens copy‑strategy preview modal or links to trader profile with copy panel).
+
+Data source:
+- `GET /markets/:slug/leaderboard` existing backend endpoint.
+
+3.3 Holders tab
+
+- Similar to Top Traders, but focused on holders and current size:
+  - Wallet, position size, total value, avg entry, etc.
+- Can reuse the same data from leaderboard but sorted differently.
+
+Other tabs (My Positions, My Orders, News & Events, Comments) can be thin placeholders.
+
+4) AI module – separate “AI Insights” tab
+------------------------------------------
+
+This is important: **AI goes in its own section**, not mixed into Trades/Top Traders/Holders.
+
+“AI Insights” tab content:
+
+Layout:
+
+- Column layout inside this tab:
+
+  1. **AI Summary card**
+     - Title: “AI mispricing insight”.
+     - Show:
+       - AI recommended side: “Buy YES” or “Sell NO”.
+       - AI fair price vs current market price.
+       - Edge percentage (e.g. “+12.5% estimated edge”).
+       - Short explanation paragraph or 3 bullets.
+
+  2. **AI Strategy suggestion**
+     - Card titled “Suggested allocation”.
+     - Inputs:
+       - Numeric `maxAllocation` in USDC (how much the user wants to put into this market).
+       - Risk level buttons (Low / Medium / High).
+     - Output:
+       - Recommended allocation amount for this specific market.
+       - Button: “Create strategy intent”.
+
+  3. **Execute on Base**
+     - When the user clicks “Create strategy intent”:
+       - If no wallet connected:
+         - Show message “Connect wallet above to execute on Base”.
+       - If wallet is connected:
+         - Call backend endpoint (you can reuse `/execute-strategy` or create a dedicated one):
+
+           Example payload:
+           ```ts
+           {
+             userAddress: <connected wallet>,
+             topicId: "SINGLE_MARKET_<marketSlug>",
+             marketIds: [marketSlug],
+             usdcAllocations: [maxAllocation],
+             edgeBps: [computedEdgeBps],
+             riskLevel: selectedRisk
+           }
+           ```
+
+         - Show loading state while waiting.
+         - On success display:
+           - Tx hash.
+           - Link to `https://sepolia.basescan.org/tx/<hash>`.
+
+Backend assumption (AI):
+- You can add a dedicated endpoint:
+
+  - `GET /markets/:slug/ai-insights` returning:
+    ```json
+    {
+      "marketId": "slug-or-id",
+      "recommendedSide": "YES" | "NO",
+      "aiFairPrice": 0.0-1.0,
+      "marketPrice": 0.0-1.0,
+      "edgeBps": 1234,
+      "explanation": "short natural language description"
+    }
+    ```
+
+- This endpoint can internally call your existing AI mispricing module (topic based), or be stubbed with sample data for now. The frontend should be written against this shape.
+
+Implementation details
+----------------------
+
+Tech stack constraints:
+- This is in a Next.js 14 App Router project.
+- Use:
+  - `react-query` for data fetching & caching.
+  - `axios` instance (`src/lib/api.ts`) for HTTP.
+  - `wagmi` `useAccount` for wallet address.
+- Organize page code as:
+
+  - `src/app/markets/[marketSlug]/page.tsx`
+    - Fetches core market data & passes to a `MarketLayout` component.
+  - Separate components under `src/components/markets/`:
+    - `MarketHeader.tsx`
+    - `MarketChartPanel.tsx`
+    - `OrderBookPanel.tsx`
+    - `TradeTicket.tsx`
+    - `MarketTabs.tsx`
+    - `TradesTab.tsx`
+    - `TopTradersTab.tsx`
+    - `HoldersTab.tsx`
+    - `AiInsightsTab.tsx`
+
+Focus areas:
+- Get the **layout and basic styling** close to the Fireplace screenshot.
+- Ensure all tabs render and the “AI Insights” tab is clearly separated and functional:
+  - It must fetch AI insight data from `/markets/:slug/ai-insights`.
+  - It must call `/execute-strategy` to write a simple onchain strategy intent to Base.
+
+Final deliverable
+-----------------
+
+- Updated `/markets/[marketSlug]` page implementing the above layout.
+- New React components for each section.
+- Integration with backend endpoints:
+  - `/markets/:slug/leaderboard`
+  - `/markets/:slug/trades`
+  - `/markets/:slug/ai-insights`
+  - `/execute-strategy`
+- Clean, readable TypeScript code with minimal but sensible styling that visually resembles the Fireplace Pro screenshot (dark trading terminal, header, chart, order book, bottom tabs, separate AI insights tab).
