@@ -1,6 +1,6 @@
 import { Abi } from "viem";
 
-export const STRATEGY_REGISTRY_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
+export const STRATEGY_REGISTRY_ADDRESS = "0xd4e090539A26862EF0661d9DD9c39d9e52AAbef9" as const;
 
 export const strategyRegistryAbi = [
   {

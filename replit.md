@@ -12,7 +12,7 @@ MVP is complete with the following features:
 - Strategy templates (Conservative, Balanced, Aggressive) with auto-allocation
 - Real wallet integration with OnchainKit + wagmi on Base Sepolia
 - Smart Wallet (ERC-4337) support with gasless transaction capability
-- Strategy execution with simulated blockchain transactions (real onchain execution ready when contract is deployed)
+- Strategy execution with real onchain transactions via deployed StrategyRegistry contract
 - Strategy history with transaction tracking
 - Portfolio tracking dashboard with positions and PnL
 - Real-time signal refresh with notification system
@@ -35,7 +35,7 @@ MVP is complete with the following features:
 - **Chain**: Base Sepolia (testnet)
 - **Smart Wallet**: Coinbase Smart Wallet (ERC-4337) with "smartWalletOnly" preference
 - **Gasless Transactions**: Paymaster support for sponsored transactions (requires VITE_PAYMASTER_URL env var)
-- **Smart Contract**: StrategyRegistry.sol (deployment pending - requires test ETH)
+- **Smart Contract**: StrategyRegistry.sol deployed at `0xd4e090539A26862EF0661d9DD9c39d9e52AAbef9`
 
 ## Project Architecture
 

@@ -310,9 +310,9 @@ To enable gasless transactions:
 
 ### Smart Contract Status
 - **Contract Source**: `contracts/StrategyRegistry.sol` 
-- **Deployment Status**: Not yet deployed (requires Base Sepolia ETH)
-- **Current Behavior**: Uses placeholder address (`0x0000...0001`), execution falls back to simulated mode
-- **Simulated Execution**: Strategies are recorded in database with "simulated" status when contract is unavailable
+- **Contract Address**: `0xd4e090539A26862EF0661d9DD9c39d9e52AAbef9` (Base Sepolia)
+- **Deployment Status**: Deployed and operational
+- **Execution**: Strategies are recorded onchain with transaction hash stored in database
 
 ## Environment Variables
 
@@ -405,19 +405,17 @@ contract StrategyRegistry {
 
 ## Known Limitations
 
-1. **Smart Contract Not Deployed**: StrategyRegistry uses a placeholder address. Execution is simulated until the contract is deployed to Base Sepolia with test ETH.
+1. **No Real Trading**: The platform records trading strategies onchain but doesn't execute actual trades on Polymarket. It's designed to identify opportunities and track intended positions.
 
-2. **No Real Trading**: The platform records trading strategies but doesn't execute actual trades on Polymarket. It's designed to identify opportunities and track intended positions.
+2. **Simulated PnL**: Portfolio performance uses Monte Carlo simulation based on AI fair prices, not actual market resolution data.
 
-3. **Simulated PnL**: Portfolio performance uses Monte Carlo simulation based on AI fair prices, not actual market resolution data.
+3. **Backtesting Caveats**: Historical performance projections are simulated, not based on real historical outcomes.
 
-4. **Backtesting Caveats**: Historical performance projections are simulated, not based on real historical outcomes.
-
-5. **Gasless Requires Configuration**: Gasless transactions only work when `VITE_PAYMASTER_URL` is set with a valid Coinbase Paymaster endpoint.
+4. **Gasless Requires Configuration**: Gasless transactions only work when `VITE_PAYMASTER_URL` is set with a valid Coinbase Paymaster endpoint.
 
 ## Future Improvements
 
-- [ ] Deploy StrategyRegistry contract to Base Sepolia
+- [x] Deploy StrategyRegistry contract to Base Sepolia
 - [ ] Add Polymarket resolution API integration for real PnL
 - [ ] Implement actual position tracking on Polymarket
 - [ ] Add historical performance analytics with real data
