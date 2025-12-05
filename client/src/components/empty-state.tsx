@@ -4,16 +4,21 @@ import {
   Sparkles, 
   History, 
   Star,
-  ArrowRight
+  ArrowRight,
+  Wallet,
+  PieChart
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type EmptyStateType = "no-topics" | "no-signals" | "no-history" | "not-following";
+type EmptyStateType = "no-topics" | "no-signals" | "no-history" | "not-following" | "no-wallet" | "no-strategies";
 
 interface EmptyStateProps {
   type: EmptyStateType;
   onAction?: () => void;
   className?: string;
+  title?: string;
+  description?: string;
+  actionLabel?: string;
 }
 
 const emptyStateConfig: Record<EmptyStateType, {
@@ -45,9 +50,27 @@ const emptyStateConfig: Record<EmptyStateType, {
     description: "Follow topics to get notified about new signals and opportunities.",
     actionLabel: "Browse Topics",
   },
+  "no-wallet": {
+    icon: <Wallet className="h-12 w-12 text-muted-foreground/50" />,
+    title: "Connect Wallet",
+    description: "Connect your wallet to access this feature.",
+  },
+  "no-strategies": {
+    icon: <PieChart className="h-12 w-12 text-muted-foreground/50" />,
+    title: "No Positions Yet",
+    description: "Execute your first strategy to start tracking positions.",
+    actionLabel: "Browse Topics",
+  },
 };
 
-export function EmptyState({ type, onAction, className }: EmptyStateProps) {
+export function EmptyState({ 
+  type, 
+  onAction, 
+  className,
+  title,
+  description,
+  actionLabel 
+}: EmptyStateProps) {
   const config = emptyStateConfig[type];
 
   return (
@@ -56,13 +79,13 @@ export function EmptyState({ type, onAction, className }: EmptyStateProps) {
       className
     )} data-testid={`empty-state-${type}`}>
       <div className="mb-4">{config.icon}</div>
-      <h3 className="text-lg font-semibold mb-2">{config.title}</h3>
+      <h3 className="text-lg font-semibold mb-2">{title || config.title}</h3>
       <p className="text-sm text-muted-foreground max-w-sm mb-6">
-        {config.description}
+        {description || config.description}
       </p>
-      {config.actionLabel && onAction && (
+      {(actionLabel || config.actionLabel) && onAction && (
         <Button onClick={onAction} className="gap-2" data-testid={`button-empty-action-${type}`}>
-          {config.actionLabel}
+          {actionLabel || config.actionLabel}
           <ArrowRight className="h-4 w-4" />
         </Button>
       )}

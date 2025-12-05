@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { TrendingUp, History, Menu, X } from "lucide-react";
+import { TrendingUp, History, Menu, X, PieChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { WalletButton } from "@/components/wallet-button";
@@ -18,6 +18,7 @@ export function Navigation({ walletAddress, onConnect, onDisconnect }: Navigatio
 
   const navItems = [
     { href: "/", label: "Topics", icon: TrendingUp },
+    { href: "/portfolio", label: "Portfolio", icon: PieChart },
     { href: "/history", label: "History", icon: History },
   ];
 
