@@ -32,10 +32,8 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ComposedChart,
-  Bar,
-  Cell,
-  ReferenceLine,
+  AreaChart,
+  Area,
 } from "recharts";
 
 interface MarketDetailProps {
@@ -273,15 +271,10 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
   const priceChange = market.change24h;
   const isPositive = priceChange >= 0;
 
-  // Transform price history into candlestick data format for Recharts
-  const candleData = (priceHistory || []).map((candle) => ({
-    ...candle,
-    // For the wick (high-low range)
-    wick: [candle.low, candle.high],
-    // For the body (open-close range)  
-    body: candle.close >= candle.open 
-      ? [candle.open, candle.close]
-      : [candle.close, candle.open],
+  // Transform price history into simple line data
+  const chartData = (priceHistory || []).map((point) => ({
+    timestamp: point.timestamp,
+    price: point.close,
   }));
 
   return (
@@ -395,7 +388,7 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
               </div>
 
               <div className="h-[300px]">
-                {candleData.length === 0 ? (
+                {chartData.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
                     <BarChart3 className="h-8 w-8 mb-2 opacity-50" />
                     <p className="text-sm">
@@ -406,7 +399,13 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={candleData} barGap={0} barCategoryGap="5%">
+                    <AreaChart data={chartData}>
+                      <defs>
+                        <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis
                         dataKey="timestamp"
@@ -436,28 +435,17 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
                           fontSize: "12px",
                         }}
                         labelFormatter={(val) => new Date(val).toLocaleString()}
-                        formatter={(val: number, name: string) => {
-                          if (name === "wick") return null;
-                          return [`${(val * 100).toFixed(2)}%`, name.charAt(0).toUpperCase() + name.slice(1)];
-                        }}
+                        formatter={(val: number) => [`${(val * 100).toFixed(2)}%`, "Price"]}
                       />
-                      <Bar dataKey="wick" barSize={2} isAnimationActive={false}>
-                        {candleData.map((entry, index) => (
-                          <Cell 
-                            key={`wick-${index}`}
-                            fill={entry.close >= entry.open ? "#22c55e" : "#ef4444"}
-                          />
-                        ))}
-                      </Bar>
-                      <Bar dataKey="body" barSize={10} isAnimationActive={false}>
-                        {candleData.map((entry, index) => (
-                          <Cell 
-                            key={`body-${index}`}
-                            fill={entry.close >= entry.open ? "#22c55e" : "#ef4444"}
-                          />
-                        ))}
-                      </Bar>
-                    </ComposedChart>
+                      <Area
+                        type="monotone"
+                        dataKey="price"
+                        stroke="#22c55e"
+                        strokeWidth={2}
+                        fill="url(#priceGradient)"
+                        isAnimationActive={false}
+                      />
+                    </AreaChart>
                   </ResponsiveContainer>
                 )}
               </div>

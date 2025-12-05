@@ -24,8 +24,8 @@ MVP is complete with the following features:
 ## Trading Terminal (/markets/:marketSlug)
 Individual market detail pages with a professional trading interface:
 - **Header**: Market question, YES/NO prices, expiry countdown, 24h change, volume stats
-- **Price Chart**: OHLC candlestick chart with 1h/1d/1w/All timeframe selectors (real CLOB data)
-- **Order Book**: Real-time bid/ask depth from Polymarket CLOB API
+- **Price Chart**: Area line chart with 1h/1d/1w/All timeframe selectors (real CLOB data)
+- **Order Book**: Real-time bid/ask depth from Polymarket CLOB API (scaled to prevent overflow)
 - **Trade Ticket**: Buy/Sell interface with amount input and execution preview
 - **Bottom Tabs**: My Positions, My Orders, Trades, Top Traders, Holders, News, Comments, AI Insights
 - **AI Insights Tab**: Shows AI-recommended side, fair price estimate, edge percentage, and strategy execution
