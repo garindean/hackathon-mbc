@@ -113,11 +113,24 @@ export function createSignalsFromAnalysis(
     const market = markets.find(m => m.id === analysis.marketId);
     if (!market) continue;
 
-    const aiFairPrice = analysis.aiProbability / 100;
-    const edgeBps = Math.round((aiFairPrice - market.currentPrice) * 10000);
+    const aiYesProb = analysis.aiProbability / 100;
+    const marketYesPrice = market.currentPrice;
+    
+    // Calculate side-aware prices and edge
+    // For YES: we're betting the price should go up (AI thinks YES is underpriced)
+    // For NO: we're betting the price should go down (AI thinks YES is overpriced, so NO is underpriced)
+    const isYesSide = analysis.side === "YES";
+    
+    // The price we're trading at (what we pay for our side)
+    const marketSidePrice = isYesSide ? marketYesPrice : (1 - marketYesPrice);
+    // What AI thinks our side is worth
+    const aiFairSidePrice = isYesSide ? aiYesProb : (1 - aiYesProb);
+    
+    // Edge = how much our side is underpriced (positive = good opportunity)
+    const edgeBps = Math.round((aiFairSidePrice - marketSidePrice) * 10000);
 
-    // Only create signal if edge is significant
-    if (Math.abs(edgeBps) < 300) continue;
+    // Only create signal if edge is significant (and positive - we found value)
+    if (edgeBps < 300) continue;
 
     signals.push({
       topicId,
@@ -125,8 +138,8 @@ export function createSignalsFromAnalysis(
       marketQuestion: market.question,
       marketDescription: market.description || null,
       side: analysis.side,
-      marketPrice: market.currentPrice,
-      aiFairPrice,
+      marketPrice: marketSidePrice,  // Price of the side we're betting on
+      aiFairPrice: aiFairSidePrice,  // AI's fair value for the side we're betting on
       edgeBps,
       explanation: analysis.explanation,
       volume: market.volume || null,
