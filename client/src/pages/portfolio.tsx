@@ -44,26 +44,38 @@ interface Position {
   topicName: string;
 }
 
-function generateMockPosition(
+function createPosition(
   strategySignal: any,
   signal: any,
   topicName: string,
-  strategyId: string
+  strategyId: string,
+  currentPrices: Map<string, number>
 ): Position {
   const entryPrice = signal.marketPrice;
-  const randomDelta = (Math.random() - 0.4) * 0.15;
-  const currentPrice = Math.max(0.01, Math.min(0.99, entryPrice + randomDelta));
+  // Use real current price from Polymarket if available, otherwise use entry price
+  const currentPrice = currentPrices.get(signal.marketId) ?? entryPrice;
   
-  const pnl = (currentPrice - entryPrice) * strategySignal.usdcAllocation;
-  const pnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
+  // Calculate PnL based on position side
+  // For YES positions: profit if price goes up
+  // For NO positions: profit if price goes down  
+  const isYesSide = signal.side === "YES";
+  const effectiveCurrentPrice = isYesSide ? currentPrice : (1 - currentPrice);
+  const effectiveEntryPrice = entryPrice;
   
+  const pnl = (effectiveCurrentPrice - effectiveEntryPrice) * strategySignal.usdcAllocation;
+  const pnlPercent = effectiveEntryPrice > 0 ? ((effectiveCurrentPrice - effectiveEntryPrice) / effectiveEntryPrice) * 100 : 0;
+  
+  // Determine status based on market end date
   let status: PositionStatus = "active";
   if (signal.endDate && new Date(signal.endDate) < new Date()) {
-    const resolved = Math.random() > 0.3;
-    if (resolved) {
-      status = pnl >= 0 ? "won" : "lost";
+    // Market has ended - check if resolved based on final price
+    if (currentPrice >= 0.95 || currentPrice <= 0.05) {
+      // Market resolved (price near 0 or 1)
+      const resolvedYes = currentPrice >= 0.95;
+      const wonBet = (isYesSide && resolvedYes) || (!isYesSide && !resolvedYes);
+      status = wonBet ? "won" : "lost";
     } else {
-      status = "pending";
+      status = "pending"; // Awaiting resolution
     }
   }
   
@@ -72,7 +84,7 @@ function generateMockPosition(
     marketQuestion: signal.marketQuestion,
     side: signal.side,
     entryPrice,
-    currentPrice,
+    currentPrice: effectiveCurrentPrice,
     allocation: strategySignal.usdcAllocation,
     pnl,
     pnlPercent,
@@ -91,8 +103,40 @@ export default function PortfolioPage({ walletAddress }: PortfolioPageProps) {
     enabled: !!walletAddress,
   });
 
+  // Get unique market IDs from all executed strategies
+  const marketIds = useMemo(() => {
+    if (!strategies) return [];
+    const ids = new Set<string>();
+    for (const strategy of strategies) {
+      if (strategy.status !== "executed" || !strategy.signals) continue;
+      for (const ss of strategy.signals) {
+        if (ss.signal?.marketId) {
+          ids.add(ss.signal.marketId);
+        }
+      }
+    }
+    return Array.from(ids);
+  }, [strategies]);
+
+  // Fetch current prices for all markets in portfolio
+  const { data: currentPrices } = useQuery<Record<string, number>>({
+    queryKey: ["/api/portfolio/prices", marketIds],
+    queryFn: async () => {
+      if (marketIds.length === 0) return {};
+      const res = await fetch(`/api/portfolio/prices?marketIds=${marketIds.join(",")}`);
+      if (!res.ok) return {};
+      return res.json();
+    },
+    enabled: marketIds.length > 0,
+    refetchInterval: 60000, // Refresh prices every minute
+  });
+
   const positions = useMemo(() => {
     if (!strategies) return [];
+    
+    const priceMap = new Map<string, number>(
+      Object.entries(currentPrices || {}).map(([k, v]) => [k, v])
+    );
     
     const allPositions: Position[] = [];
     
@@ -102,13 +146,13 @@ export default function PortfolioPage({ walletAddress }: PortfolioPageProps) {
       for (const ss of strategy.signals) {
         if (!ss.signal) continue;
         allPositions.push(
-          generateMockPosition(ss, ss.signal, strategy.topic?.name || "Unknown", strategy.id)
+          createPosition(ss, ss.signal, strategy.topic?.name || "Unknown", strategy.id, priceMap)
         );
       }
     }
     
     return allPositions;
-  }, [strategies]);
+  }, [strategies, currentPrices]);
 
   const stats = useMemo(() => {
     if (!positions.length) {
@@ -163,7 +207,7 @@ export default function PortfolioPage({ walletAddress }: PortfolioPageProps) {
             Track your positions, PnL, and market resolutions
           </p>
         </div>
-        <PageLoadingSkeleton type="strategies" />
+        <PageLoadingSkeleton type="signals" />
       </div>
     );
   }

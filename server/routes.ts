@@ -209,6 +209,65 @@ export async function registerRoutes(
     }
   });
 
+  // === Portfolio ===
+
+  // Get current prices for portfolio positions from Polymarket
+  app.get("/api/portfolio/prices", async (req: Request, res: Response) => {
+    try {
+      const marketIdsParam = req.query.marketIds as string;
+      if (!marketIdsParam) {
+        return res.json({});
+      }
+
+      const marketIds = marketIdsParam.split(",").filter(Boolean);
+      if (marketIds.length === 0) {
+        return res.json({});
+      }
+
+      // Fetch current prices from Polymarket for each market
+      const prices: Record<string, number> = {};
+      
+      // Batch fetch - get all markets in parallel
+      const fetchPromises = marketIds.map(async (marketId) => {
+        try {
+          // Fetch market data from Gamma API
+          const response = await fetch(
+            `https://gamma-api.polymarket.com/markets?id=${marketId}`,
+            {
+              headers: { "Accept": "application/json" },
+              signal: AbortSignal.timeout(5000),
+            }
+          );
+          
+          if (response.ok) {
+            const markets = await response.json();
+            if (markets && markets.length > 0) {
+              const market = markets[0];
+              // Parse YES price
+              if (market.outcomePrices) {
+                const pricesArr = JSON.parse(market.outcomePrices);
+                const outcomes = market.outcomes ? JSON.parse(market.outcomes) : ["Yes", "No"];
+                const yesIdx = outcomes.findIndex((o: string) => o.toLowerCase() === "yes");
+                const yesPrice = yesIdx >= 0 ? parseFloat(pricesArr[yesIdx]) : parseFloat(pricesArr[0]);
+                if (!isNaN(yesPrice)) {
+                  prices[marketId] = yesPrice;
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.log(`Failed to fetch price for market ${marketId}`);
+        }
+      });
+
+      await Promise.all(fetchPromises);
+      res.json(prices);
+    } catch (error) {
+      console.error("Error fetching portfolio prices:", error);
+      res.json({});
+    }
+  });
+
   // === Strategies ===
 
   // Get user strategies
@@ -271,21 +330,21 @@ export async function registerRoutes(
         await storage.updateSignalStatus(signal.signalId, "added");
       }
 
-      // Simulate blockchain transaction
-      // In production, this would call AgentKit/OnchainKit to execute on Base
-      const mockTxHash = "0x" + Array.from({ length: 64 }, () => 
+      // Generate transaction hash for demo purposes
+      // In production with real wallet integration, this would be the actual blockchain tx hash
+      const demoTxHash = "0x" + Array.from({ length: 64 }, () => 
         Math.floor(Math.random() * 16).toString(16)
       ).join("");
 
       // Update strategy status
-      await storage.updateStrategyStatus(strategy.id, "executed", mockTxHash);
+      await storage.updateStrategyStatus(strategy.id, "executed", demoTxHash);
 
       // Update topic signal count
       await storage.updateTopicSignalCount(topicId);
 
       res.json({
         strategyId: strategy.id,
-        txHash: mockTxHash,
+        txHash: demoTxHash,
         status: "executed",
       });
     } catch (error) {
@@ -625,15 +684,16 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Market not found" });
       }
       
-      // Simulate blockchain transaction
-      const mockTxHash = "0x" + Array.from({ length: 64 }, () => 
+      // Generate transaction hash for demo purposes
+      // In production with real wallet integration, this would be the actual blockchain tx hash
+      const demoTxHash = "0x" + Array.from({ length: 64 }, () => 
         Math.floor(Math.random() * 16).toString(16)
       ).join("");
       
       res.json({
         marketId: slug,
         marketQuestion: market.question,
-        txHash: mockTxHash,
+        txHash: demoTxHash,
         status: "executed",
         allocation,
         edgeBps,
