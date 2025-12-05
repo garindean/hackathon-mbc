@@ -138,179 +138,244 @@ export function createSignalsFromAnalysis(
   return signals;
 }
 
-// Mock Polymarket API integration
-// In production, this would call the actual Polymarket API
+// Polymarket API configuration
+const GAMMA_API_BASE = "https://gamma-api.polymarket.com";
+const CLOB_API_BASE = "https://clob.polymarket.com";
+
+interface PolymarketMarket {
+  id: string;
+  question: string;
+  groupItemTitle?: string;
+  description?: string;
+  conditionId?: string;
+  slug?: string;
+  volume?: number;
+  liquidity?: number;
+  endDate?: string;
+  active?: boolean;
+  closed?: boolean;
+  outcomePrices?: string;
+  outcomes?: string;
+  clobTokenIds?: string;
+}
+
+// Fetch live price from CLOB API for a token (with short timeout)
+async function fetchClobPrice(tokenId: string): Promise<number | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000); // 3 second timeout per token
+  
+  try {
+    const response = await fetch(
+      `${CLOB_API_BASE}/price?token_id=${tokenId}&side=BUY`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    const price = parseFloat(data.price);
+    return !isNaN(price) && price >= 0 && price <= 1 ? price : null;
+  } catch (error) {
+    clearTimeout(timeout);
+    return null;
+  }
+}
+
+// Get YES token ID from market data
+function getYesTokenId(market: PolymarketMarket): string | null {
+  if (!market.clobTokenIds || !market.outcomes) return null;
+  
+  try {
+    const tokenIds: string[] = JSON.parse(market.clobTokenIds);
+    const outcomes: string[] = JSON.parse(market.outcomes);
+    
+    const yesIndex = outcomes.findIndex(o => 
+      o.toLowerCase() === "yes" || o.toLowerCase() === "true"
+    );
+    
+    return yesIndex >= 0 && tokenIds[yesIndex] ? tokenIds[yesIndex] : tokenIds[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+// Parse YES price from Polymarket market data
+function parseYesPrice(market: PolymarketMarket): number | null {
+  if (!market.outcomePrices) return null;
+  
+  try {
+    const prices: string[] = JSON.parse(market.outcomePrices);
+    const outcomes: string[] = market.outcomes ? JSON.parse(market.outcomes) : ["Yes", "No"];
+    
+    // Find the YES outcome index
+    const yesIndex = outcomes.findIndex(o => 
+      o.toLowerCase() === "yes" || o.toLowerCase() === "true"
+    );
+    
+    if (yesIndex >= 0 && prices[yesIndex]) {
+      const price = parseFloat(prices[yesIndex]);
+      if (!isNaN(price) && price >= 0 && price <= 1) {
+        return price;
+      }
+    }
+    
+    // Fallback: if outcomes are ["Yes", "No"], first price is YES
+    if (outcomes.length === 2 && prices.length >= 1) {
+      const price = parseFloat(prices[0]);
+      if (!isNaN(price) && price >= 0 && price <= 1) {
+        return price;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`Failed to parse prices for market ${market.id}:`, error);
+    return null;
+  }
+}
+
+// Check if market matches any keyword
+function matchesKeywords(market: PolymarketMarket, keywords: string[]): boolean {
+  const searchText = [
+    market.question,
+    market.groupItemTitle,
+    market.description,
+  ].filter(Boolean).join(" ").toLowerCase();
+  
+  return keywords.some(keyword => {
+    const lowerKeyword = keyword.toLowerCase();
+    // Match whole keyword or individual words for multi-word keywords
+    return searchText.includes(lowerKeyword) || 
+           lowerKeyword.split(/\s+/).every(word => word.length > 2 && searchText.includes(word));
+  });
+}
+
+// Fetch markets from Polymarket Gamma API
 export async function fetchMarketsForTopic(
   topicKeywords: string[]
 ): Promise<MarketData[]> {
-  // Simulated market data based on topic keywords
-  // In production, this would query the Polymarket API
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000); // 15 second timeout
   
-  const mockMarkets: Record<string, MarketData[]> = {
-    politics: [
-      {
-        id: "pm-001",
-        question: "Will the incumbent party win the next election?",
-        description: "Resolves YES if the incumbent party wins the majority of seats",
-        currentPrice: 0.45,
-        volume: 2500000,
-        liquidity: 150000,
-        endDate: "2025-11-05"
-      },
-      {
-        id: "pm-002",
-        question: "Will there be a government shutdown before Q2 2025?",
-        currentPrice: 0.28,
-        volume: 800000,
-        liquidity: 45000,
-        endDate: "2025-03-31"
-      },
-      {
-        id: "pm-003",
-        question: "Will the approval rating exceed 50% by year end?",
-        currentPrice: 0.35,
-        volume: 450000,
-        liquidity: 25000,
-        endDate: "2025-12-31"
+  try {
+    console.log(`Fetching Polymarket data for keywords: ${topicKeywords.join(", ")}`);
+    
+    // Fetch active markets from Gamma API
+    const response = await fetch(
+      `${GAMMA_API_BASE}/markets?active=true&closed=false&limit=200`,
+      { signal: controller.signal }
+    );
+    
+    clearTimeout(timeout);
+    
+    if (!response.ok) {
+      console.error(`Gamma API error: ${response.status}`);
+      return [];
+    }
+    
+    const allMarkets: PolymarketMarket[] = await response.json();
+    console.log(`Fetched ${allMarkets.length} markets from Polymarket`);
+    
+    // Filter markets by keywords
+    const matchingMarkets: MarketData[] = [];
+    
+    for (const market of allMarkets) {
+      if (market.closed) continue;
+      
+      // Check if market matches any keyword
+      if (!matchesKeywords(market, topicKeywords)) continue;
+      
+      // Parse YES price from Gamma - skip market if no reliable price
+      const gammaPrice = parseYesPrice(market);
+      if (gammaPrice === null) {
+        console.log(`Skipping market ${market.id}: no reliable price`);
+        continue;
       }
-    ],
-    crypto: [
-      {
-        id: "pm-101",
-        question: "Will Bitcoin exceed $150,000 by end of 2025?",
-        currentPrice: 0.42,
-        volume: 5000000,
-        liquidity: 350000,
-        endDate: "2025-12-31"
-      },
-      {
-        id: "pm-102",
-        question: "Will Ethereum flip Bitcoin by market cap in 2025?",
-        currentPrice: 0.08,
-        volume: 1200000,
-        liquidity: 80000,
-        endDate: "2025-12-31"
-      },
-      {
-        id: "pm-103",
-        question: "Will a major exchange collapse in 2025?",
-        currentPrice: 0.15,
-        volume: 650000,
-        liquidity: 40000,
-        endDate: "2025-12-31"
+      
+      matchingMarkets.push({
+        id: market.id,
+        question: market.question,
+        description: market.description,
+        currentPrice: gammaPrice,
+        volume: market.volume,
+        liquidity: market.liquidity,
+        endDate: market.endDate,
+      });
+    }
+    
+    // Sort by volume (descending) and take top 10 with valid volume
+    const sortedMarkets = matchingMarkets
+      .filter(m => typeof m.volume === 'number' && m.volume > 0)
+      .sort((a, b) => (b.volume || 0) - (a.volume || 0))
+      .slice(0, 10);
+    
+    // Fetch live CLOB prices for top markets (in parallel with timeout)
+    const marketsToEnrich = sortedMarkets.slice(0, 5); // Limit CLOB calls for performance
+    const clobPricePromises = marketsToEnrich.map(async (market) => {
+      const originalMarket = allMarkets.find(m => m.id === market.id);
+      if (!originalMarket) return null;
+      
+      const tokenId = getYesTokenId(originalMarket);
+      if (!tokenId) return null;
+      
+      const livePrice = await fetchClobPrice(tokenId);
+      return { marketId: market.id, livePrice };
+    });
+    
+    try {
+      const clobResults = await Promise.all(clobPricePromises);
+      for (const result of clobResults) {
+        if (result?.livePrice !== null && result?.livePrice !== undefined) {
+          const market = sortedMarkets.find(m => m.id === result.marketId);
+          if (market) {
+            console.log(`Updated price for ${market.id}: ${market.currentPrice} -> ${result.livePrice} (CLOB)`);
+            market.currentPrice = result.livePrice;
+          }
+        }
       }
-    ],
-    ai: [
-      {
-        id: "pm-201",
-        question: "Will GPT-5 be released before July 2025?",
-        currentPrice: 0.72,
-        volume: 1800000,
-        liquidity: 120000,
-        endDate: "2025-06-30"
-      },
-      {
-        id: "pm-202",
-        question: "Will AI pass the Turing test in a public competition in 2025?",
-        currentPrice: 0.55,
-        volume: 900000,
-        liquidity: 60000,
-        endDate: "2025-12-31"
-      },
-      {
-        id: "pm-203",
-        question: "Will an AI system achieve AGI as defined by leading researchers?",
-        currentPrice: 0.12,
-        volume: 2000000,
-        liquidity: 150000,
-        endDate: "2025-12-31"
-      }
-    ],
-    sports: [
-      {
-        id: "pm-301",
-        question: "Will the defending champions repeat in the Super Bowl?",
-        currentPrice: 0.18,
-        volume: 3500000,
-        liquidity: 200000,
-        endDate: "2026-02-08"
-      },
-      {
-        id: "pm-302",
-        question: "Will any team go undefeated in the regular season?",
-        currentPrice: 0.02,
-        volume: 500000,
-        liquidity: 30000,
-        endDate: "2025-12-30"
-      }
-    ],
-    economy: [
-      {
-        id: "pm-401",
-        question: "Will the Fed cut rates by more than 100bps in 2025?",
-        currentPrice: 0.38,
-        volume: 4000000,
-        liquidity: 280000,
-        endDate: "2025-12-31"
-      },
-      {
-        id: "pm-402",
-        question: "Will US GDP growth exceed 3% in 2025?",
-        currentPrice: 0.32,
-        volume: 1500000,
-        liquidity: 95000,
-        endDate: "2025-12-31"
-      },
-      {
-        id: "pm-403",
-        question: "Will unemployment rise above 5% by Q4 2025?",
-        currentPrice: 0.22,
-        volume: 800000,
-        liquidity: 50000,
-        endDate: "2025-12-31"
-      }
-    ],
-    tech: [
-      {
-        id: "pm-501",
-        question: "Will Apple's market cap exceed $4 trillion in 2025?",
-        currentPrice: 0.55,
-        volume: 2200000,
-        liquidity: 160000,
-        endDate: "2025-12-31"
-      },
-      {
-        id: "pm-502",
-        question: "Will Tesla release a fully autonomous vehicle in 2025?",
-        currentPrice: 0.25,
-        volume: 1800000,
-        liquidity: 110000,
-        endDate: "2025-12-31"
-      }
-    ]
-  };
-
-  // Find markets matching any keyword
-  const matchingMarkets: MarketData[] = [];
-  
-  for (const keyword of topicKeywords) {
-    const lowerKeyword = keyword.toLowerCase();
-    for (const [category, markets] of Object.entries(mockMarkets)) {
-      if (category.includes(lowerKeyword) || lowerKeyword.includes(category)) {
-        matchingMarkets.push(...markets);
+    } catch (error) {
+      console.log("CLOB price fetch failed, using Gamma prices:", error);
+    }
+    
+    // Fallback: if very few matches, return top markets by volume regardless of keywords
+    if (sortedMarkets.length < 3) {
+      console.log(`Few keyword matches (${sortedMarkets.length}), adding top markets by volume`);
+      
+      const topVolumeMarkets = allMarkets
+        .filter(m => !m.closed && parseYesPrice(m) !== null)
+        .sort((a, b) => (b.volume || 0) - (a.volume || 0))
+        .slice(0, 5)
+        .map(market => ({
+          id: market.id,
+          question: market.question,
+          description: market.description,
+          currentPrice: parseYesPrice(market)!,
+          volume: market.volume,
+          liquidity: market.liquidity,
+          endDate: market.endDate,
+        }));
+      
+      // Merge without duplicates
+      const existingIds = new Set(sortedMarkets.map(m => m.id));
+      for (const market of topVolumeMarkets) {
+        if (!existingIds.has(market.id)) {
+          sortedMarkets.push(market);
+          if (sortedMarkets.length >= 10) break;
+        }
       }
     }
+    
+    console.log(`Found ${sortedMarkets.length} matching markets for keywords: ${topicKeywords.join(", ")}`);
+    
+    return sortedMarkets;
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error("Polymarket API request timed out");
+    } else {
+      console.error("Failed to fetch Polymarket data:", error);
+    }
+    return [];
   }
-
-  // If no specific matches, return a mix of markets
-  if (matchingMarkets.length === 0) {
-    return [
-      mockMarkets.politics[0],
-      mockMarkets.crypto[0],
-      mockMarkets.ai[0],
-    ];
-  }
-
-  // Remove duplicates
-  return Array.from(new Map(matchingMarkets.map(m => [m.id, m])).values());
 }

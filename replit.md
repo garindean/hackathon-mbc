@@ -6,14 +6,29 @@ EdgeFinder is a Base-native prediction market strategy platform that uses AI to 
 ## Current State
 MVP is complete with the following features:
 - Topic browsing with subscription/follow functionality
+- **Real Polymarket data** - Fetches live markets from Polymarket Gamma API
 - AI-powered signal generation using OpenAI (via Replit AI Integrations)
 - Strategy builder for allocating USDC across multiple signals
+- Strategy templates (Conservative, Balanced, Aggressive) with auto-allocation
 - Real wallet integration with OnchainKit + wagmi on Base Sepolia
 - Smart Wallet (ERC-4337) support with gasless transaction capability
 - Strategy execution with simulated blockchain transactions (real onchain execution ready when contract is deployed)
 - Strategy history with transaction tracking
+- Portfolio tracking dashboard with positions and PnL
+- Real-time signal refresh with notification system
+- Backtesting visualization with Monte Carlo simulation
 - Dark/light mode support
 - Responsive design for mobile and desktop
+
+## Polymarket Integration
+- **Gamma API**: Fetches 200 active markets from `https://gamma-api.polymarket.com/markets`
+- **CLOB API**: Gets live bid prices from `https://clob.polymarket.com/price` for top 5 markets
+- Markets are filtered by topic keywords (question, title, description)
+- YES price is correctly mapped using outcomes array (not assumed to be first)
+- Markets without reliable prices are skipped (no fallback to 0.5)
+- Top 10 highest-volume matching markets are displayed per topic
+- Fallback: if < 3 keyword matches, adds top volume markets to ensure content
+- Timeouts: 15s for Gamma API, 3s per CLOB token price request
 
 ## Wallet & Blockchain
 - **Wallet Connection**: OnchainKit 0.36.6 + wagmi

@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { BacktestingPanel } from "@/components/backtesting-panel";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { strategyRegistryAbi, STRATEGY_REGISTRY_ADDRESS } from "@/lib/contracts";
@@ -33,7 +34,7 @@ import {
   DollarSign,
   Sparkles
 } from "lucide-react";
-import type { Signal, Topic } from "@shared/schema";
+import type { Signal, Topic, SignalWithActions } from "@shared/schema";
 import { cn } from "@/lib/utils";
 
 interface StrategyData {
@@ -181,6 +182,14 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
     const expectedValue = (weightedEdge / 10000) * totalAlloc;
 
     return { weightedEdge, riskLevel, expectedValue };
+  }, [signals]);
+
+  const signalsWithActions: SignalWithActions[] = useMemo(() => {
+    return signals.map(signal => ({
+      ...signal,
+      isSelected: true,
+      allocation: signal.allocation,
+    }));
   }, [signals]);
 
   const executeMutation = useMutation({
@@ -458,9 +467,15 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
             </Table>
           </div>
         </CardContent>
-        <CardFooter className="flex-col gap-4">
-          <Separator />
-          
+      </Card>
+
+      <BacktestingPanel 
+        signals={signalsWithActions} 
+        totalAllocation={strategyData.totalAllocation} 
+      />
+
+      <Card>
+        <CardFooter className="flex-col gap-4 pt-6">
           {STRATEGY_REGISTRY_ADDRESS !== "0x0000000000000000000000000000000000000000" && (
             <div className="flex items-center justify-between w-full p-3 rounded-lg bg-muted/50">
               <div className="flex items-center gap-2">
