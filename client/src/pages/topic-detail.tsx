@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { SignalCard } from "@/components/signal-card";
 import { StrategyBuilder } from "@/components/strategy-builder";
+import { StrategyTemplates } from "@/components/strategy-templates";
 import { EmptyState } from "@/components/empty-state";
 import { PageLoadingSkeleton } from "@/components/loading-skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -186,6 +187,14 @@ export default function TopicDetailPage({ walletAddress }: TopicDetailPageProps)
         newMap.set(signalId, { ...signal, allocation: amount });
       }
       return newMap;
+    });
+  };
+
+  const handleApplyTemplate = (newSelections: Map<string, SignalWithActions>) => {
+    setSelectedSignals(newSelections);
+    toast({
+      title: "Template Applied",
+      description: `${newSelections.size} signals selected with auto-allocation`,
     });
   };
 
@@ -386,7 +395,14 @@ export default function TopicDetailPage({ walletAddress }: TopicDetailPageProps)
           )}
         </div>
 
-        <div className="mt-8 lg:mt-0">
+        <div className="mt-8 lg:mt-0 space-y-6">
+          {signalsWithActions.length > 0 && (
+            <StrategyTemplates
+              signals={signalsWithActions}
+              onApplyTemplate={handleApplyTemplate}
+              currentSelectedCount={selectedSignals.size}
+            />
+          )}
           <StrategyBuilder
             selectedSignals={Array.from(selectedSignals.values())}
             onRemoveSignal={handleRemoveSignal}
