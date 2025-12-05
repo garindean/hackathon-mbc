@@ -395,58 +395,69 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
               </div>
 
               <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={candleData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis
-                      dataKey="timestamp"
-                      tickFormatter={(val) => {
-                        const date = new Date(val);
-                        return timeframe === "All" 
-                          ? date.toLocaleDateString([], { month: "short", day: "numeric" })
-                          : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-                      }}
-                      stroke="hsl(var(--muted-foreground))"
-                      fontSize={11}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      domain={["auto", "auto"]}
-                      tickFormatter={(val) => `${(val * 100).toFixed(0)}%`}
-                      stroke="hsl(var(--muted-foreground))"
-                      fontSize={11}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                        fontSize: "12px",
-                      }}
-                      labelFormatter={(val) => new Date(val).toLocaleString()}
-                      formatter={(val: number, name: string) => {
-                        if (name === "wick") return null;
-                        return [`${(val * 100).toFixed(2)}%`, name.charAt(0).toUpperCase() + name.slice(1)];
-                      }}
-                    />
-                    <Bar dataKey="wick" barSize={1} isAnimationActive={false}>
-                      {candleData.map((entry, index) => (
-                        <Cell 
-                          key={`wick-${index}`}
-                          fill={entry.close >= entry.open ? "#22c55e" : "#ef4444"}
-                        />
-                      ))}
-                    </Bar>
-                    <Bar dataKey="body" barSize={8} isAnimationActive={false}>
-                      {candleData.map((entry, index) => (
-                        <Cell 
-                          key={`body-${index}`}
-                          fill={entry.close >= entry.open ? "#22c55e" : "#ef4444"}
-                        />
-                      ))}
-                    </Bar>
-                  </ComposedChart>
-                </ResponsiveContainer>
+                {candleData.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                    <BarChart3 className="h-8 w-8 mb-2 opacity-50" />
+                    <p className="text-sm">
+                      {new Date(market.endDate) < new Date() 
+                        ? "Market resolved - no active trading data"
+                        : "No price history available for this timeframe"}
+                    </p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={candleData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis
+                        dataKey="timestamp"
+                        tickFormatter={(val) => {
+                          const date = new Date(val);
+                          return timeframe === "All" 
+                            ? date.toLocaleDateString([], { month: "short", day: "numeric" })
+                            : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                        }}
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={11}
+                        interval="preserveStartEnd"
+                      />
+                      <YAxis
+                        domain={["auto", "auto"]}
+                        tickFormatter={(val) => `${(val * 100).toFixed(0)}%`}
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={11}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                          fontSize: "12px",
+                        }}
+                        labelFormatter={(val) => new Date(val).toLocaleString()}
+                        formatter={(val: number, name: string) => {
+                          if (name === "wick") return null;
+                          return [`${(val * 100).toFixed(2)}%`, name.charAt(0).toUpperCase() + name.slice(1)];
+                        }}
+                      />
+                      <Bar dataKey="wick" barSize={1} isAnimationActive={false}>
+                        {candleData.map((entry, index) => (
+                          <Cell 
+                            key={`wick-${index}`}
+                            fill={entry.close >= entry.open ? "#22c55e" : "#ef4444"}
+                          />
+                        ))}
+                      </Bar>
+                      <Bar dataKey="body" barSize={8} isAnimationActive={false}>
+                        {candleData.map((entry, index) => (
+                          <Cell 
+                            key={`body-${index}`}
+                            fill={entry.close >= entry.open ? "#22c55e" : "#ef4444"}
+                          />
+                        ))}
+                      </Bar>
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </Card>
           </div>
@@ -455,7 +466,7 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
             <Card className="p-4 h-full">
               <h3 className="font-medium text-sm mb-3">Order Book (Yes)</h3>
 
-              {orderBook && (
+              {orderBook && orderBook.bids.length > 0 && orderBook.asks.length > 0 && (
                 <>
                   <div className="flex items-center gap-2 mb-3">
                     <div
@@ -516,6 +527,17 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
                     ))}
                   </div>
                 </>
+              )}
+
+              {orderBook && (orderBook.bids.length === 0 || orderBook.asks.length === 0) && (
+                <div className="h-32 flex flex-col items-center justify-center text-muted-foreground">
+                  <Activity className="h-6 w-6 mb-2 opacity-50" />
+                  <p className="text-xs text-center">
+                    {new Date(market.endDate) < new Date() 
+                      ? "Market resolved - no active orders"
+                      : "No orders in book"}
+                  </p>
+                </div>
               )}
 
               {!orderBook && (

@@ -321,40 +321,63 @@ export async function registerRoutes(
       const { slug } = req.params;
       const timeframe = req.query.timeframe as string || "1d";
       
-      // Generate mock OHLC candlestick data
-      const now = Date.now();
-      const intervals: Record<string, { count: number; ms: number }> = {
-        "1h": { count: 60, ms: 60000 },
-        "1d": { count: 48, ms: 1800000 },
-        "1w": { count: 84, ms: 7200000 },
-        "All": { count: 90, ms: 86400000 },
-      };
+      // Fetch market to get token IDs
+      const market = await fetchMarketBySlug(slug);
+      if (!market || !market.clobTokenIds || market.clobTokenIds.length === 0) {
+        // Return empty array if no real market found
+        return res.json([]);
+      }
       
-      const { count, ms } = intervals[timeframe] || intervals["1d"];
-      let basePrice = 0.35 + Math.random() * 0.3;
+      // Get the YES token ID (first token is usually YES)
+      const outcomes = market.outcomes || ["Yes", "No"];
+      const yesIdx = outcomes.findIndex((o: string) => o.toLowerCase() === "yes");
+      const yesTokenId = market.clobTokenIds[yesIdx >= 0 ? yesIdx : 0];
       
-      const history = Array.from({ length: count }, (_, i) => {
-        const volatility = 0.015 + Math.random() * 0.02;
-        const drift = (Math.random() - 0.48) * 0.015;
-        
-        const open = basePrice;
-        const close = Math.max(0.05, Math.min(0.95, basePrice + drift));
-        const high = Math.max(open, close) + Math.random() * volatility;
-        const low = Math.min(open, close) - Math.random() * volatility;
-        
-        basePrice = close;
-        
-        return {
-          timestamp: now - (count - i) * ms,
-          open: Math.max(0.05, Math.min(0.95, open)),
-          high: Math.max(0.05, Math.min(0.95, high)),
-          low: Math.max(0.05, Math.min(0.95, low)),
-          close: Math.max(0.05, Math.min(0.95, close)),
-          volume: Math.floor(Math.random() * 50000) + 5000,
-        };
-      });
+      // Fetch real price history from CLOB API
+      const priceHistory = await fetchPriceHistory(yesTokenId, timeframe);
       
-      res.json(history);
+      if (priceHistory && priceHistory.length > 0) {
+        // Convert line data to OHLC candlestick data
+        // Group prices into candles based on timeframe
+        const candleSize = timeframe === "1h" ? 60000 : // 1 min candles for 1h
+                          timeframe === "1d" ? 1800000 : // 30 min candles for 1d
+                          timeframe === "1w" ? 7200000 : // 2 hour candles for 1w
+                          86400000; // 1 day candles for All
+        
+        const candles: Map<number, { open: number; high: number; low: number; close: number; volume: number }> = new Map();
+        
+        for (const point of priceHistory) {
+          const candleTime = Math.floor(point.timestamp / candleSize) * candleSize;
+          const existing = candles.get(candleTime);
+          
+          if (existing) {
+            existing.high = Math.max(existing.high, point.price);
+            existing.low = Math.min(existing.low, point.price);
+            existing.close = point.price;
+          } else {
+            candles.set(candleTime, {
+              open: point.price,
+              high: point.price,
+              low: point.price,
+              close: point.price,
+              volume: 0,
+            });
+          }
+        }
+        
+        // Convert to array and sort by timestamp
+        const ohlcData = Array.from(candles.entries())
+          .map(([timestamp, candle]) => ({
+            timestamp,
+            ...candle,
+          }))
+          .sort((a, b) => a.timestamp - b.timestamp);
+        
+        return res.json(ohlcData);
+      }
+      
+      // Return empty array if no data
+      res.json([]);
     } catch (error) {
       console.error("Error fetching price history:", error);
       res.status(500).json({ error: "Failed to fetch price history" });
@@ -366,30 +389,64 @@ export async function registerRoutes(
     try {
       const { slug } = req.params;
       
-      // Generate mock order book
-      const midPrice = 0.5 + (Math.random() - 0.5) * 0.3;
+      // Fetch market to get token IDs
+      const market = await fetchMarketBySlug(slug);
+      if (!market || !market.clobTokenIds || market.clobTokenIds.length === 0) {
+        // Return empty order book if no real market found
+        return res.json({
+          bids: [],
+          asks: [],
+          bidPercent: 50,
+          askPercent: 50,
+        });
+      }
       
-      const bids = Array.from({ length: 8 }, (_, i) => ({
-        price: midPrice - (i + 1) * 0.01,
-        shares: Math.floor(Math.random() * 800) + 200,
-        totalUsd: Math.floor(Math.random() * 5000) + 1000,
-      }));
+      // Get the YES token ID
+      const outcomes = market.outcomes || ["Yes", "No"];
+      const yesIdx = outcomes.findIndex((o: string) => o.toLowerCase() === "yes");
+      const yesTokenId = market.clobTokenIds[yesIdx >= 0 ? yesIdx : 0];
       
-      const asks = Array.from({ length: 8 }, (_, i) => ({
-        price: midPrice + (i + 1) * 0.01,
-        shares: Math.floor(Math.random() * 800) + 200,
-        totalUsd: Math.floor(Math.random() * 5000) + 1000,
-      }));
+      // Fetch real order book from CLOB API
+      const orderBook = await fetchOrderBook(yesTokenId);
       
-      const totalBidVolume = bids.reduce((s, b) => s + b.shares, 0);
-      const totalAskVolume = asks.reduce((s, a) => s + a.shares, 0);
-      const total = totalBidVolume + totalAskVolume;
+      if (orderBook) {
+        // Transform to our format
+        const bids = orderBook.bids
+          .slice(0, 10)
+          .map(b => ({
+            price: b.price,
+            shares: Math.round(b.size),
+            totalUsd: Math.round(b.price * b.size),
+          }))
+          .sort((a, b) => b.price - a.price); // Highest bid first
+        
+        const asks = orderBook.asks
+          .slice(0, 10)
+          .map(a => ({
+            price: a.price,
+            shares: Math.round(a.size),
+            totalUsd: Math.round(a.price * a.size),
+          }))
+          .sort((a, b) => a.price - b.price); // Lowest ask first
+        
+        const totalBidVolume = bids.reduce((s, b) => s + b.shares, 0);
+        const totalAskVolume = asks.reduce((s, a) => s + a.shares, 0);
+        const total = totalBidVolume + totalAskVolume || 1;
+        
+        return res.json({
+          bids,
+          asks,
+          bidPercent: Math.round((totalBidVolume / total) * 100),
+          askPercent: Math.round((totalAskVolume / total) * 100),
+        });
+      }
       
+      // Return empty if no data
       res.json({
-        bids,
-        asks,
-        bidPercent: Math.round((totalBidVolume / total) * 100),
-        askPercent: Math.round((totalAskVolume / total) * 100),
+        bids: [],
+        asks: [],
+        bidPercent: 50,
+        askPercent: 50,
       });
     } catch (error) {
       console.error("Error fetching order book:", error);
@@ -532,8 +589,7 @@ export async function registerRoutes(
   return httpServer;
 }
 
-// Helper function to fetch market by slug from Polymarket
-async function fetchMarketBySlug(slug: string): Promise<{
+interface MarketWithTokens {
   id: string;
   slug: string;
   question: string;
@@ -546,72 +602,159 @@ async function fetchMarketBySlug(slug: string): Promise<{
   change24h: number;
   endDate: string;
   outcomes: string[];
-} | null> {
+  clobTokenIds: string[];
+  conditionId: string;
+}
+
+// Cache for market data to avoid repeated API calls
+const marketCache = new Map<string, { data: MarketWithTokens; timestamp: number }>();
+const CACHE_TTL = 60000; // 1 minute cache
+
+// Helper function to parse market data from Gamma API response
+function parseMarketData(market: any, slug: string): MarketWithTokens {
+  const outcomes = market.outcomes ? JSON.parse(market.outcomes) : ["Yes", "No"];
+  const yesIdx = outcomes.findIndex((o: string) => o.toLowerCase() === "yes");
+  const prices = market.outcomePrices ? JSON.parse(market.outcomePrices) : [0.5, 0.5];
+  const yesPrice = yesIdx >= 0 ? parseFloat(prices[yesIdx]) : parseFloat(prices[0]);
+  
+  // Parse clobTokenIds - these are the token IDs for YES and NO outcomes
+  const clobTokenIds = market.clobTokenIds ? JSON.parse(market.clobTokenIds) : [];
+  
+  return {
+    id: market.id || slug,
+    slug: market.slug || slug,
+    question: market.question || "Market Question",
+    description: market.description || "",
+    yesPrice,
+    noPrice: 1 - yesPrice,
+    volume24h: parseFloat(market.volume24hr) || 0,
+    totalVolume: parseFloat(market.volume) || 0,
+    openInterest: parseFloat(market.openInterest) || 0,
+    change24h: 0, // Will be calculated from price history
+    endDate: market.endDate || new Date(Date.now() + 30 * 24 * 3600000).toISOString(),
+    outcomes,
+    clobTokenIds,
+    conditionId: market.conditionId || "",
+  };
+}
+
+// Helper function to fetch market by slug from Polymarket
+async function fetchMarketBySlug(slug: string): Promise<MarketWithTokens | null> {
+  // Check cache first
+  const cached = marketCache.get(slug);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+
   try {
-    // Try to fetch from Polymarket Gamma API
-    const response = await fetch(`https://gamma-api.polymarket.com/markets?slug=${slug}`, {
+    // First, try to fetch directly as a market slug
+    const marketResponse = await fetch(`https://gamma-api.polymarket.com/markets?slug=${slug}`, {
       headers: { "Accept": "application/json" },
       signal: AbortSignal.timeout(10000),
     });
     
-    if (response.ok) {
-      const markets = await response.json();
+    if (marketResponse.ok) {
+      const markets = await marketResponse.json();
       if (markets && markets.length > 0) {
-        const market = markets[0];
-        const outcomes = market.outcomes ? JSON.parse(market.outcomes) : ["Yes", "No"];
-        const yesIdx = outcomes.findIndex((o: string) => o.toLowerCase() === "yes");
-        const prices = market.outcomePrices ? JSON.parse(market.outcomePrices) : [0.5, 0.5];
-        const yesPrice = yesIdx >= 0 ? parseFloat(prices[yesIdx]) : parseFloat(prices[0]);
-        
-        return {
-          id: market.id || slug,
-          slug: market.slug || slug,
-          question: market.question || "Market Question",
-          description: market.description || "",
-          yesPrice,
-          noPrice: 1 - yesPrice,
-          volume24h: parseFloat(market.volume24hr) || Math.floor(Math.random() * 100000),
-          totalVolume: parseFloat(market.volume) || Math.floor(Math.random() * 1000000),
-          openInterest: parseFloat(market.openInterest) || Math.floor(Math.random() * 500000),
-          change24h: (Math.random() - 0.5) * 0.1,
-          endDate: market.endDate || new Date(Date.now() + 30 * 24 * 3600000).toISOString(),
-          outcomes,
-        };
+        const result = parseMarketData(markets[0], slug);
+        marketCache.set(slug, { data: result, timestamp: Date.now() });
+        return result;
       }
     }
     
-    // Fallback: return mock data for demo purposes
-    return {
-      id: slug,
-      slug,
-      question: `Will ${slug.replace(/-/g, " ")}?`,
-      description: "",
-      yesPrice: 0.45 + Math.random() * 0.2,
-      noPrice: 0.35 + Math.random() * 0.2,
-      volume24h: Math.floor(Math.random() * 100000) + 10000,
-      totalVolume: Math.floor(Math.random() * 1000000) + 100000,
-      openInterest: Math.floor(Math.random() * 500000) + 50000,
-      change24h: (Math.random() - 0.5) * 0.1,
-      endDate: new Date(Date.now() + 30 * 24 * 3600000).toISOString(),
-      outcomes: ["Yes", "No"],
-    };
+    // If no direct market found, try to fetch as an event slug
+    // Events contain multiple markets, we'll use the first/primary one
+    const eventResponse = await fetch(`https://gamma-api.polymarket.com/events?slug=${slug}`, {
+      headers: { "Accept": "application/json" },
+      signal: AbortSignal.timeout(10000),
+    });
+    
+    if (eventResponse.ok) {
+      const events = await eventResponse.json();
+      if (events && events.length > 0 && events[0].markets && events[0].markets.length > 0) {
+        // Get the first (primary) market from the event
+        const primaryMarket = events[0].markets[0];
+        const result = parseMarketData(primaryMarket, primaryMarket.slug || slug);
+        marketCache.set(slug, { data: result, timestamp: Date.now() });
+        // Also cache under the actual market slug for future lookups
+        if (primaryMarket.slug && primaryMarket.slug !== slug) {
+          marketCache.set(primaryMarket.slug, { data: result, timestamp: Date.now() });
+        }
+        return result;
+      }
+    }
+    
+    return null;
   } catch (error) {
     console.error("Error fetching market from Polymarket:", error);
+    return null;
+  }
+}
+
+// Fetch order book from CLOB API
+async function fetchOrderBook(tokenId: string): Promise<{
+  bids: { price: number; size: number }[];
+  asks: { price: number; size: number }[];
+} | null> {
+  try {
+    const response = await fetch(`https://clob.polymarket.com/book?token_id=${tokenId}`, {
+      headers: { "Accept": "application/json" },
+      signal: AbortSignal.timeout(5000),
+    });
     
-    // Return mock data on error
-    return {
-      id: slug,
-      slug,
-      question: `Will ${slug.replace(/-/g, " ")}?`,
-      description: "",
-      yesPrice: 0.45 + Math.random() * 0.2,
-      noPrice: 0.35 + Math.random() * 0.2,
-      volume24h: Math.floor(Math.random() * 100000) + 10000,
-      totalVolume: Math.floor(Math.random() * 1000000) + 100000,
-      openInterest: Math.floor(Math.random() * 500000) + 50000,
-      change24h: (Math.random() - 0.5) * 0.1,
-      endDate: new Date(Date.now() + 30 * 24 * 3600000).toISOString(),
-      outcomes: ["Yes", "No"],
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        bids: (data.bids || []).map((b: { price: string; size: string }) => ({
+          price: parseFloat(b.price),
+          size: parseFloat(b.size),
+        })),
+        asks: (data.asks || []).map((a: { price: string; size: string }) => ({
+          price: parseFloat(a.price),
+          size: parseFloat(a.size),
+        })),
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error("Error fetching order book:", error);
+    return null;
+  }
+}
+
+// Fetch price history from CLOB API
+async function fetchPriceHistory(tokenId: string, interval: string): Promise<{
+  timestamp: number;
+  price: number;
+}[] | null> {
+  try {
+    // Map our timeframes to Polymarket intervals
+    const intervalMap: Record<string, string> = {
+      "1h": "1h",
+      "1d": "1d",
+      "1w": "1w",
+      "All": "max",
     };
+    const clobInterval = intervalMap[interval] || "1d";
+    
+    const response = await fetch(
+      `https://clob.polymarket.com/prices-history?market=${tokenId}&interval=${clobInterval}`,
+      {
+        headers: { "Accept": "application/json" },
+        signal: AbortSignal.timeout(5000),
+      }
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+      return (data.history || []).map((point: { t: number; p: number }) => ({
+        timestamp: point.t * 1000, // Convert to milliseconds
+        price: point.p,
+      }));
+    }
+    return null;
+  } catch (error) {
+    console.error("Error fetching price history:", error);
+    return null;
   }
 }

@@ -24,21 +24,26 @@ MVP is complete with the following features:
 ## Trading Terminal (/markets/:marketSlug)
 Individual market detail pages with a professional trading interface:
 - **Header**: Market question, YES/NO prices, expiry countdown, 24h change, volume stats
-- **Price Chart**: Interactive chart with 1h/1d/1w/All timeframe selectors
-- **Order Book**: Visual bid/ask depth with percentage distribution
+- **Price Chart**: OHLC candlestick chart with 1h/1d/1w/All timeframe selectors (real CLOB data)
+- **Order Book**: Real-time bid/ask depth from Polymarket CLOB API
 - **Trade Ticket**: Buy/Sell interface with amount input and execution preview
 - **Bottom Tabs**: My Positions, My Orders, Trades, Top Traders, Holders, News, Comments, AI Insights
 - **AI Insights Tab**: Shows AI-recommended side, fair price estimate, edge percentage, and strategy execution
+- **Resolved Market Handling**: Graceful empty state messages for resolved markets with no active trading
 
 ## Polymarket Integration
 - **Gamma API**: Fetches 200 active markets from `https://gamma-api.polymarket.com/markets`
-- **CLOB API**: Gets live bid prices from `https://clob.polymarket.com/price` for top 5 markets
+- **CLOB API - Price History**: `https://clob.polymarket.com/prices-history?market=<tokenId>&interval=<1h|1d|1w|max>`
+- **CLOB API - Order Book**: `https://clob.polymarket.com/book?token_id=<tokenId>`
+- **CLOB API - Current Price**: `https://clob.polymarket.com/price` for top 5 markets
 - Markets are filtered by topic keywords (question, title, description)
 - YES price is correctly mapped using outcomes array (not assumed to be first)
+- clobTokenIds from Gamma API used for CLOB API calls
 - Markets without reliable prices are skipped (no fallback to 0.5)
 - Top 10 highest-volume matching markets are displayed per topic
-- Fallback: if < 3 keyword matches, adds top volume markets to ensure content
-- Timeouts: 15s for Gamma API, 3s per CLOB token price request
+- Market data cached for 1 minute to reduce API calls
+- Resolved markets show empty order books (expected Polymarket behavior)
+- Timeouts: 15s for Gamma API, 5s per CLOB request
 
 ## Wallet & Blockchain
 - **Wallet Connection**: OnchainKit 0.36.6 + wagmi
