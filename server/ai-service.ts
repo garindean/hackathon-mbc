@@ -1,11 +1,12 @@
 import OpenAI from "openai";
 import type { InsertSignal } from "@shared/schema";
 
-// This is using Replit's AI Integrations service, which provides OpenAI-compatible API access
-// without requiring your own API key. Charges are billed to your Replit credits.
+// Support both Replit AI Integrations and standard OpenAI API key
+// Replit: Uses AI_INTEGRATIONS_OPENAI_* env vars (auto-configured)
+// Local: Uses standard OPENAI_API_KEY
 const openai = new OpenAI({
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || "https://api.openai.com/v1",
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
 });
 
 interface MarketData {
