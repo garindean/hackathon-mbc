@@ -145,12 +145,22 @@ export default function StrategyReviewPage({ walletAddress }: StrategyReviewPage
 
   const { data: topic } = useQuery<Topic>({
     queryKey: ["/api/topics", strategyData?.topicId],
+    queryFn: async () => {
+      const res = await fetch(`/api/topics/${strategyData?.topicId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch topic");
+      return res.json();
+    },
     enabled: !!strategyData?.topicId,
   });
 
   const signalIds = strategyData?.signals.map(s => s.signalId) || [];
   const { data: signalsData } = useQuery<Signal[]>({
-    queryKey: ["/api/signals", signalIds.join(",")],
+    queryKey: ["/api/signals", signalIds],
+    queryFn: async () => {
+      const res = await fetch(`/api/signals?ids=${encodeURIComponent(signalIds.join(","))}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch signals");
+      return res.json();
+    },
     enabled: signalIds.length > 0,
   });
 
