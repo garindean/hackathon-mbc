@@ -41,6 +41,7 @@ export interface IStorage {
   
   getSignalsByTopic(topicId: string): Promise<Signal[]>;
   getSignals(signalIds: string[]): Promise<Signal[]>;
+  getSignalByMarketId(marketId: string): Promise<Signal | undefined>;
   createSignal(signal: InsertSignal): Promise<Signal>;
   createSignals(signals: InsertSignal[]): Promise<Signal[]>;
   updateSignalStatus(signalId: string, status: string): Promise<void>;
@@ -180,6 +181,16 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(signals)
       .where(inArray(signals.id, signalIds));
+  }
+
+  async getSignalByMarketId(marketId: string): Promise<Signal | undefined> {
+    const [signal] = await db
+      .select()
+      .from(signals)
+      .where(eq(signals.marketId, marketId))
+      .orderBy(desc(signals.createdAt))
+      .limit(1);
+    return signal || undefined;
   }
 
   async createSignal(insertSignal: InsertSignal): Promise<Signal> {

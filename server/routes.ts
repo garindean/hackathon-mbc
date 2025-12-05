@@ -622,7 +622,7 @@ export async function registerRoutes(
     }
   });
 
-  // Get AI insights for market using real OpenAI analysis
+  // Get AI insights for market - uses existing signal if available
   app.get("/api/markets/:slug/ai-insights", async (req: Request, res: Response) => {
     try {
       const { slug } = req.params;
@@ -634,7 +634,22 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Market not found" });
       }
       
-      // Use real AI to analyze the market
+      // First, check if we have an existing signal for this market
+      const existingSignal = await storage.getSignalByMarketId(market.id);
+      
+      if (existingSignal) {
+        // Return the stored signal data for consistency
+        return res.json({
+          marketId: slug,
+          recommendedSide: existingSignal.direction,
+          aiFairPrice: existingSignal.aiFairPrice,
+          marketPrice: existingSignal.marketPrice,
+          edgeBps: existingSignal.edgeBps,
+          explanation: existingSignal.rationale,
+        });
+      }
+      
+      // No existing signal - generate fresh AI analysis
       const analysis = await analyzeSingleMarket({
         id: market.id,
         question: market.question,
