@@ -316,31 +316,138 @@ To enable gasless transactions:
 
 ## Environment Variables
 
-| Variable | Description | Required | Auto-configured |
-|----------|-------------|----------|-----------------|
-| `DATABASE_URL` | PostgreSQL connection string | Yes | Yes (Replit) |
-| `SESSION_SECRET` | Express session secret | Yes | No |
-| `AI_INTEGRATIONS_OPENAI_BASE_URL` | OpenAI API base URL | Yes | Yes (Replit AI) |
-| `AI_INTEGRATIONS_OPENAI_API_KEY` | OpenAI API key | Yes | Yes (Replit AI) |
-| `VITE_PAYMASTER_URL` | Coinbase Paymaster URL | No | No |
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes | - |
+| `SESSION_SECRET` | Express session secret | Yes | - |
+| `OPENAI_API_KEY` | OpenAI API key | Yes | - |
+| `VITE_PAYMASTER_URL` | Coinbase Paymaster URL | No | - |
 
-## Running the Application
+> **Note**: On Replit, `AI_INTEGRATIONS_OPENAI_BASE_URL` and `AI_INTEGRATIONS_OPENAI_API_KEY` are auto-configured. For local development, use `OPENAI_API_KEY` directly.
+
+## Local Development Setup
+
+### Prerequisites
+
+- **Node.js** 18+ 
+- **npm** 9+
+- **PostgreSQL** 14+ (local or cloud-hosted like Neon, Supabase, or Railway)
+- **OpenAI API Key** from [platform.openai.com](https://platform.openai.com)
+
+### Step 1: Clone the Repository
 
 ```bash
-# Install dependencies
+git clone https://github.com/YOUR_USERNAME/edgefinder.git
+cd edgefinder
+```
+
+### Step 2: Install Dependencies
+
+```bash
 npm install
+```
 
-# Push database schema (if needed)
+### Step 3: Set Up PostgreSQL Database
+
+**Option A: Local PostgreSQL**
+```bash
+# Create database
+createdb edgefinder
+
+# Your connection string will be:
+# postgresql://localhost:5432/edgefinder
+```
+
+**Option B: Cloud PostgreSQL (Neon - recommended)**
+1. Create a free account at [neon.tech](https://neon.tech)
+2. Create a new project
+3. Copy the connection string from the dashboard
+
+### Step 4: Configure Environment Variables
+
+Create a `.env` file in the project root:
+
+```bash
+# Database
+DATABASE_URL=postgresql://username:password@host:5432/edgefinder
+
+# Session
+SESSION_SECRET=your-secret-key-here-make-it-long-and-random
+
+# OpenAI (get from platform.openai.com)
+OPENAI_API_KEY=sk-your-openai-api-key
+
+# Optional: Gasless transactions
+# VITE_PAYMASTER_URL=https://api.developer.coinbase.com/rpc/v1/base-sepolia/your-key
+```
+
+### Step 5: Initialize the Database
+
+```bash
 npm run db:push
+```
 
-# Start development server
+This creates all the required tables (topics, signals, strategies, etc.).
+
+### Step 6: Start the Development Server
+
+```bash
+npm run dev
+```
+
+The app will be available at `http://localhost:5000`.
+
+### Step 7: Seed Initial Data (Optional)
+
+The app starts with default topics (US Politics, Crypto, AI/Tech, Sports, Entertainment). To trigger an AI scan for signals:
+
+1. Open `http://localhost:5000` in your browser
+2. Click on any topic card
+3. Click the "Scan for Signals" button
+4. Wait for the AI to analyze Polymarket and generate signals
+
+### Local Development Notes
+
+- **Hot Reload**: Both frontend (Vite HMR) and backend auto-restart on file changes
+- **Database**: Data persists across restarts when using PostgreSQL
+- **API Requests**: All API calls go through `/api/*` endpoints on the same port
+- **Wallet Testing**: Connect a Coinbase Smart Wallet to test blockchain features
+
+### Troubleshooting
+
+**"DATABASE_URL must be set" error**
+- Ensure your `.env` file exists and contains a valid `DATABASE_URL`
+- Check that PostgreSQL is running if using local database
+
+**"OpenAI API error" when scanning**
+- Verify your `OPENAI_API_KEY` is valid and has credits
+- Check API rate limits if you've made many requests
+
+**Wallet connection issues**
+- Ensure you're on Base Sepolia network
+- Clear browser cache/cookies if wallet state is stale
+- Coinbase Smart Wallet requires a Coinbase account
+
+**No markets appearing**
+- Polymarket API may be rate-limited; wait a few minutes
+- Check browser console for API errors
+- Gamma API timeout is 15 seconds
+
+## Running on Replit
+
+If deploying on Replit, environment variables are auto-configured:
+- Database is provisioned automatically
+- OpenAI access is via Replit AI Integrations (no key needed)
+- Just click "Run" and the app starts
+
+```bash
 npm run dev
 ```
 
 The app runs on `http://localhost:5000` with:
 - Frontend: Vite dev server with HMR
 - Backend: Express API server
-- Database: PostgreSQL (Neon-backed, persistent)
+- Database: PostgreSQL (persistent)
 
 ## Strategy Templates
 
