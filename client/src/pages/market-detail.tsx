@@ -27,15 +27,15 @@ import {
   Loader2,
 } from "lucide-react";
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  AreaChart,
-  Area,
+  ComposedChart,
+  Bar,
+  Cell,
+  ReferenceLine,
 } from "recharts";
 
 interface MarketDetailProps {
@@ -57,9 +57,12 @@ interface MarketData {
   outcomes: string[];
 }
 
-interface PricePoint {
+interface CandleData {
   timestamp: number;
-  price: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
   volume: number;
 }
 
@@ -129,7 +132,7 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
     enabled: !!marketSlug,
   });
 
-  const { data: priceHistory } = useQuery<PricePoint[]>({
+  const { data: priceHistory } = useQuery<CandleData[]>({
     queryKey: ["/api/markets", marketSlug, "price-history", timeframe],
     queryFn: async () => {
       const res = await fetch(`/api/markets/${marketSlug}/price-history?timeframe=${timeframe}`);
@@ -270,6 +273,17 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
   const priceChange = market.change24h;
   const isPositive = priceChange >= 0;
 
+  // Transform price history into candlestick data format for Recharts
+  const candleData = (priceHistory || []).map((candle) => ({
+    ...candle,
+    // For the wick (high-low range)
+    wick: [candle.low, candle.high],
+    // For the body (open-close range)  
+    body: candle.close >= candle.open 
+      ? [candle.open, candle.close]
+      : [candle.close, candle.open],
+  }));
+
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b border-border bg-card/50">
@@ -382,43 +396,56 @@ export default function MarketDetailPage({ walletAddress }: MarketDetailProps) {
 
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={priceHistory || []}>
-                    <defs>
-                      <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
+                  <ComposedChart data={candleData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis
                       dataKey="timestamp"
-                      tickFormatter={(val) => new Date(val).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      tickFormatter={(val) => {
+                        const date = new Date(val);
+                        return timeframe === "All" 
+                          ? date.toLocaleDateString([], { month: "short", day: "numeric" })
+                          : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                      }}
                       stroke="hsl(var(--muted-foreground))"
-                      fontSize={12}
+                      fontSize={11}
+                      interval="preserveStartEnd"
                     />
                     <YAxis
-                      domain={[0, 1]}
+                      domain={["auto", "auto"]}
                       tickFormatter={(val) => `${(val * 100).toFixed(0)}%`}
                       stroke="hsl(var(--muted-foreground))"
-                      fontSize={12}
+                      fontSize={11}
                     />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: "hsl(var(--card))",
                         border: "1px solid hsl(var(--border))",
                         borderRadius: "8px",
+                        fontSize: "12px",
                       }}
                       labelFormatter={(val) => new Date(val).toLocaleString()}
-                      formatter={(val: number) => [`${(val * 100).toFixed(2)}%`, "Price"]}
+                      formatter={(val: number, name: string) => {
+                        if (name === "wick") return null;
+                        return [`${(val * 100).toFixed(2)}%`, name.charAt(0).toUpperCase() + name.slice(1)];
+                      }}
                     />
-                    <Area
-                      type="monotone"
-                      dataKey="price"
-                      stroke="hsl(var(--primary))"
-                      fill="url(#priceGradient)"
-                      strokeWidth={2}
-                    />
-                  </AreaChart>
+                    <Bar dataKey="wick" barSize={1} isAnimationActive={false}>
+                      {candleData.map((entry, index) => (
+                        <Cell 
+                          key={`wick-${index}`}
+                          fill={entry.close >= entry.open ? "#22c55e" : "#ef4444"}
+                        />
+                      ))}
+                    </Bar>
+                    <Bar dataKey="body" barSize={8} isAnimationActive={false}>
+                      {candleData.map((entry, index) => (
+                        <Cell 
+                          key={`body-${index}`}
+                          fill={entry.close >= entry.open ? "#22c55e" : "#ef4444"}
+                        />
+                      ))}
+                    </Bar>
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </Card>

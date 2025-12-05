@@ -315,30 +315,41 @@ export async function registerRoutes(
     }
   });
 
-  // Get price history for market
+  // Get price history for market (OHLC candlestick data)
   app.get("/api/markets/:slug/price-history", async (req: Request, res: Response) => {
     try {
       const { slug } = req.params;
       const timeframe = req.query.timeframe as string || "1d";
       
-      // Generate mock price history data
+      // Generate mock OHLC candlestick data
       const now = Date.now();
       const intervals: Record<string, { count: number; ms: number }> = {
         "1h": { count: 60, ms: 60000 },
-        "1d": { count: 96, ms: 900000 },
-        "1w": { count: 168, ms: 3600000 },
-        "All": { count: 365, ms: 86400000 },
+        "1d": { count: 48, ms: 1800000 },
+        "1w": { count: 84, ms: 7200000 },
+        "All": { count: 90, ms: 86400000 },
       };
       
       const { count, ms } = intervals[timeframe] || intervals["1d"];
-      let basePrice = 0.45 + Math.random() * 0.2;
+      let basePrice = 0.35 + Math.random() * 0.3;
       
       const history = Array.from({ length: count }, (_, i) => {
-        const drift = (Math.random() - 0.48) * 0.02;
-        basePrice = Math.max(0.05, Math.min(0.95, basePrice + drift));
+        const volatility = 0.015 + Math.random() * 0.02;
+        const drift = (Math.random() - 0.48) * 0.015;
+        
+        const open = basePrice;
+        const close = Math.max(0.05, Math.min(0.95, basePrice + drift));
+        const high = Math.max(open, close) + Math.random() * volatility;
+        const low = Math.min(open, close) - Math.random() * volatility;
+        
+        basePrice = close;
+        
         return {
           timestamp: now - (count - i) * ms,
-          price: basePrice,
+          open: Math.max(0.05, Math.min(0.95, open)),
+          high: Math.max(0.05, Math.min(0.95, high)),
+          low: Math.max(0.05, Math.min(0.95, low)),
+          close: Math.max(0.05, Math.min(0.95, close)),
           volume: Math.floor(Math.random() * 50000) + 5000,
         };
       });
@@ -574,7 +585,7 @@ async function fetchMarketBySlug(slug: string): Promise<{
       id: slug,
       slug,
       question: `Will ${slug.replace(/-/g, " ")}?`,
-      description: "This is a prediction market for demonstration purposes.",
+      description: "",
       yesPrice: 0.45 + Math.random() * 0.2,
       noPrice: 0.35 + Math.random() * 0.2,
       volume24h: Math.floor(Math.random() * 100000) + 10000,
@@ -592,7 +603,7 @@ async function fetchMarketBySlug(slug: string): Promise<{
       id: slug,
       slug,
       question: `Will ${slug.replace(/-/g, " ")}?`,
-      description: "This is a prediction market for demonstration purposes.",
+      description: "",
       yesPrice: 0.45 + Math.random() * 0.2,
       noPrice: 0.35 + Math.random() * 0.2,
       volume24h: Math.floor(Math.random() * 100000) + 10000,
